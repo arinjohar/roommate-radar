@@ -38,6 +38,7 @@
     "test:fairness": "tsc -p tsconfig.tests.json && node .test-dist/fairness/engine.test.js",
     "test:services": "tsx --test tests/**/*.test.ts",
     "check:env": "node scripts/validate-env.mjs",
+    "verify:hosted": "node scripts/verify-hosted-supabase.mjs",
     "health": "npx expo-doctor",
     "export:android": "expo export --platform android --output-dir .expo-exports/android",
     "export:ios": "expo export --platform ios --output-dir .expo-exports/ios",

@@ -151,6 +151,10 @@ Branch: `feature/backend-and-builds`
 - Configure EAS project linkage, signing, preview profiles, and environment values.
 - Produce device builds by the end of day one and again after final integration.
 
+Before declaring the hosted path ready, this developer runs `npm run verify:hosted`
+against the linked project after `db push --include-seed`, then installs a preview
+build configured with the hosted public values on a physical Android and iOS device.
+
 This developer also acts as integrator, but does not rewrite other branches during
 merge. Broken contracts go back to the owning developer with a minimal reproduction.
 

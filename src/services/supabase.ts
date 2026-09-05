@@ -179,7 +179,9 @@ export async function createAnonymousSupabaseSession(
   const response = await fetch(`${url.replace(/\/$/, '')}/auth/v1/signup`, {
     method: 'POST',
     headers: { apikey: anonKey, 'Content-Type': 'application/json' },
-    body: '{}',
+    // Match Supabase's signInAnonymously request shape. An empty request body can
+    // be interpreted differently by older GoTrue deployments.
+    body: JSON.stringify({ data: {}, gotrue_meta_security: {} }),
   });
   if (!response.ok) throw new Error(`Anonymous sign-in failed (${response.status}).`);
   const value = await response.json() as {
