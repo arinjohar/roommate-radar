@@ -31,6 +31,10 @@ Check TypeScript before opening a pull request:
 npm run typecheck
 ```
 
+The app uses a persistent offline demo service by default. See
+[`docs/BACKEND.md`](docs/BACKEND.md) for the shared service contracts, Supabase
+schema, and environment configuration.
+
 ## Branch workflow
 
 `main` should always launch. Each teammate creates one branch from the latest
@@ -65,3 +69,5 @@ not at the end of the hackathon.
 
 See [the development plan](docs/DEVELOPMENT_PLAN.md) for scope, ownership, data
 contracts, merge order, demo acceptance criteria, and the hour-by-hour plan.
+The exact local checks, EAS profiles, credential boundaries, and device-build steps
+are in [`docs/RELEASE.md`](docs/RELEASE.md).

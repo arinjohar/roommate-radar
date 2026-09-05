@@ -4,6 +4,7 @@
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.20",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
@@ -12,7 +13,9 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
     "@types/react": "~19.2.2",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -21,8 +24,15 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
+    "check:env": "node scripts/validate-env.mjs",
+    "health": "npx expo-doctor",
+    "export:android": "expo export --platform android --output-dir .expo-exports/android",
+    "export:ios": "expo export --platform ios --output-dir .expo-exports/ios",
     "build:preview:android": "npx eas-cli@latest build --platform android --profile preview",
-    "build:preview:ios": "npx eas-cli@latest build --platform ios --profile preview"
+    "build:preview:ios": "npx eas-cli@latest build --platform ios --profile preview",
+    "build:production:android": "npx eas-cli@latest build --platform android --profile production",
+    "build:production:ios": "npx eas-cli@latest build --platform ios --profile production"
   },
   "private": true
 }

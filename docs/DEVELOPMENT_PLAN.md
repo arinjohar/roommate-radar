@@ -59,6 +59,12 @@ Required tables:
 | `completions` | `id`, `chore_id`, `member_id`, `points_awarded`, `completed_at` |
 | `pulse_responses` | `id`, `household_id`, `member_id`, `week_start`, `cleanliness`, `noise`, `communication` |
 
+The backend adds `households.created_by` and `members.user_id` to bind anonymous
+Supabase users to RLS-protected household membership. Completion retry keys and
+table timestamps are persistence details and do not change the client domain
+contract. The app defaults to a persistent AsyncStorage adapter; Supabase is
+selected only through `src/services/index.ts` after environment and auth setup.
+
 Create one `src/types/domain.ts` file from this contract before parallel feature
 work starts. IDs are strings, dates cross boundaries as ISO 8601 strings, and
 scores are integers. Changes to shared types require a small, early pull request.
