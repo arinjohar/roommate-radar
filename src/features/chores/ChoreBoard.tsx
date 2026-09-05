@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -75,8 +74,7 @@ export function ChoreBoard({
   };
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.content}>
         <Text style={styles.eyebrow}>MAPLE HOUSE · THIS WEEK</Text>
         <Text style={styles.title}>A little shared effort goes a long way.</Text>
         <Text style={styles.subtitle}>Mark a task when it’s done so the household picture stays kind and clear.</Text>
@@ -88,7 +86,6 @@ export function ChoreBoard({
           const completion = completions.find((item) => item.choreId === chore.id);
           return <ChoreCard key={chore.id} chore={chore} completion={completion} isCompleting={completingId === chore.id} onComplete={() => void complete(chore)} />;
         })}</View> : null}
-      </ScrollView>
     </View>
   );
 }
@@ -125,7 +122,7 @@ function EmptyState() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cream }, content: { padding: 24, paddingTop: 56, paddingBottom: 44, width: '100%', maxWidth: 640, alignSelf: 'center' },
+  content: { marginTop: 16, padding: 18, width: '100%', borderRadius: 22, backgroundColor: colors.paper, borderWidth: 1, borderColor: '#EEF1EE' },
   eyebrow: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.3, borderLeftWidth: 3, borderLeftColor: colors.coral, paddingLeft: 9 },
   title: { color: colors.ink, fontSize: 34, lineHeight: 39, fontWeight: '900', letterSpacing: -1.25, marginTop: 16 }, subtitle: { color: colors.muted, fontSize: 15, lineHeight: 23, marginTop: 12, marginBottom: 28 },
   list: { gap: 13 }, card: { backgroundColor: colors.paper, borderRadius: 20, borderWidth: 1, borderColor: '#EEF1EE', padding: 17, shadowColor: colors.ink, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 }, cardComplete: { backgroundColor: '#F6FBF8', borderColor: colors.mint },

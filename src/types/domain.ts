@@ -1,4 +1,17 @@
-/** Shared shapes for values that cross the screen/service boundary. */
+export type Household = {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdAt: string;
+};
+
+export type Member = {
+  id: string;
+  householdId: string;
+  displayName: string;
+  avatarColor: string;
+};
+
 export type Chore = {
   id: string;
   householdId: string;
@@ -15,4 +28,14 @@ export type Completion = {
   memberId: string;
   pointsAwarded: number;
   completedAt: string;
+};
+
+export type PulseResponse = {
+  id: string;
+  householdId: string;
+  memberId: string;
+  weekStart: string;
+  cleanliness: number;
+  noise: number;
+  communication: number;
 };
