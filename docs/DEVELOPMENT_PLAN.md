@@ -97,11 +97,14 @@ Landing
 Home
 ├── Chores → Chore detail / complete
 ├── Balance → Weekly effort + suggestion
-└── Pulse → Three ratings → Weekly insight
+├── Pulse → Three ratings → Weekly insight
+└── Members → Current residence roster, with the active member labeled “(You)”
 ```
 
-Use a three-tab app after onboarding: **Chores**, **Balance**, and **Pulse**. Avoid
-nested navigation except the chore detail sheet.
+Use a four-tab app after onboarding: **Chores**, **Balance**, **Pulse**, and
+**Members**. The Members tab is a lightweight, read-only roster for orienting
+household conversations; it is not a permissions or social-management system.
+Avoid nested navigation except the chore detail sheet.
 
 ## 5. Team ownership and branch boundaries
 
@@ -275,7 +278,9 @@ Run this on iOS and Android before the final build:
 7. The under-contributing member receives a specific upcoming chore suggestion.
 8. Submit three pulse ratings; the app surfaces the lowest-rated category neutrally.
 9. Turn off networking; the app shows cached/seeded data or a recoverable error.
-10. Reset the demo and repeat the 90-second pitch flow.
+10. Open Members and confirm the current household roster appears, with the active
+    user labeled “(You)”.
+11. Reset the demo and repeat the 90-second pitch flow.
 
 ## 10. Risk register and cuts
 

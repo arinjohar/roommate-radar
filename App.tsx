@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import {
   Alert,
   Platform,
@@ -22,7 +23,26 @@ const roommates = [
   { initials: 'AR', color: colors.yellow, width: '42%' },
 ] as const;
 
+const householdMembers = [
+  { id: 'aanya', name: 'Aanya', initials: 'AC', color: colors.coral, isCurrentUser: true },
+  { id: 'jamie', name: 'Jamie', initials: 'JM', color: colors.mint, isCurrentUser: false },
+  { id: 'sam', name: 'Sam', initials: 'SK', color: colors.yellow, isCurrentUser: false },
+  { id: 'alex', name: 'Alex', initials: 'AR', color: '#B8C8EE', isCurrentUser: false },
+] as const;
+
+type HomeTab = 'Chores' | 'Balance' | 'Pulse' | 'Members';
+
 export default function App() {
+  const [hasHousehold, setHasHousehold] = useState(false);
+
+  if (hasHousehold) {
+    return <HouseholdHome onExit={() => setHasHousehold(false)} />;
+  }
+
+  return <LandingScreen onCreateHousehold={() => setHasHousehold(true)} />;
+}
+
+function LandingScreen({ onCreateHousehold }: { onCreateHousehold: () => void }) {
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
 
@@ -65,7 +85,7 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create a household"
-                  onPress={() => showComingSoon('Household setup')}
+                  onPress={onCreateHousehold}
                   style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.primaryButtonText}>Create a household</Text>
@@ -138,6 +158,113 @@ export default function App() {
           </View>
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function HouseholdHome({ onExit }: { onExit: () => void }) {
+  const [activeTab, setActiveTab] = useState<HomeTab>('Chores');
+  const { width } = useWindowDimensions();
+  const isNarrow = width < 390;
+
+  return (
+    <View style={styles.homeScreen}>
+      <StatusBar style="dark" />
+      <View pointerEvents="none" style={styles.homeGlow} />
+      <ScrollView contentContainerStyle={styles.homeScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.homeShell}>
+          <View style={styles.homeHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Return to the landing screen"
+              onPress={onExit}
+              style={({ pressed }) => [styles.brand, pressed && styles.buttonPressed]}
+            >
+              <RadarMark size={34} />
+              <View>
+                <Text style={styles.homeKicker}>YOUR RESIDENCE</Text>
+                <Text style={styles.homeTitle}>Maple House</Text>
+              </View>
+            </Pressable>
+            <View style={styles.homeAvatar}><Text style={styles.homeAvatarText}>AC</Text></View>
+          </View>
+
+          <View style={styles.welcomeCard}>
+            <View style={styles.welcomeIcon}><Text style={styles.welcomeIconText}>⌂</Text></View>
+            <View style={styles.welcomeCopy}>
+              <Text style={styles.welcomeEyebrow}>HOUSEHOLD READY</Text>
+              <Text style={styles.welcomeTitle}>You’re all set, Aanya.</Text>
+              <Text style={styles.welcomeText}>A small view of the shared work, made for kinder check-ins.</Text>
+            </View>
+          </View>
+
+          <View accessibilityRole="tablist" style={[styles.tabBar, isNarrow && styles.tabBarNarrow]}>
+            {(['Chores', 'Balance', 'Pulse', 'Members'] as const).map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <Pressable
+                  key={tab}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: isActive }}
+                  accessibilityLabel={`${tab} tab`}
+                  onPress={() => setActiveTab(tab)}
+                  style={({ pressed }) => [styles.tab, isActive && styles.tabActive, pressed && styles.buttonPressed]}
+                >
+                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {activeTab === 'Members' ? <MembersList /> : <HouseholdPlaceholder tab={activeTab} />}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function MembersList() {
+  return (
+    <View style={styles.membersCard}>
+      <View style={styles.membersHeading}>
+        <View>
+          <Text style={styles.membersKicker}>MAPLE HOUSE</Text>
+          <Text style={styles.membersTitle}>The people at home</Text>
+        </View>
+        <View style={styles.memberCount}><Text style={styles.memberCountText}>{householdMembers.length} MEMBERS</Text></View>
+      </View>
+      <Text style={styles.membersIntro}>Everyone in your residence, all in one gentle little list.</Text>
+      <View style={styles.memberList}>
+        {householdMembers.map((member) => (
+          <View key={member.id} style={styles.memberRow}>
+            <View style={[styles.memberAvatar, { backgroundColor: member.color }]}>
+              <Text style={styles.memberAvatarText}>{member.initials}</Text>
+            </View>
+            <Text style={styles.memberName}>
+              {member.name}{member.isCurrentUser ? <Text style={styles.youLabel}> (You)</Text> : null}
+            </Text>
+            {member.isCurrentUser ? <View style={styles.herePill}><Text style={styles.hereText}>HERE</Text></View> : null}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function HouseholdPlaceholder({ tab }: { tab: Exclude<HomeTab, 'Members'> }) {
+  const copy = {
+    Chores: ['THIS WEEK', 'Your shared to-dos will live here.', 'Start with one small thing, then let the balance build.'],
+    Balance: ['HOUSEHOLD BALANCE', 'A clear, calm view is on its way.', 'Effort points will help make the invisible work visible.'],
+    Pulse: ['WEEKLY PULSE', 'A quick check-in is on its way.', 'A few honest signals can keep a home feeling good.'],
+  } as const;
+  const [eyebrow, title, text] = copy[tab];
+
+  return (
+    <View style={styles.placeholderCard}>
+      <View style={styles.placeholderIcon}><Text style={styles.placeholderIconText}>✦</Text></View>
+      <Text style={styles.membersKicker}>{eyebrow}</Text>
+      <Text style={styles.placeholderTitle}>{title}</Text>
+      <Text style={styles.placeholderText}>{text}</Text>
     </View>
   );
 }
@@ -229,4 +356,46 @@ const styles = StyleSheet.create({
   floatingPoints: { color: colors.mint, fontSize: 9, marginTop: 2 },
   footer: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 19, alignItems: 'center' },
   footerText: { color: colors.muted, fontSize: 8, fontWeight: '800', letterSpacing: 1.15, textAlign: 'center' },
+  homeScreen: { flex: 1, backgroundColor: colors.cream },
+  homeGlow: { position: 'absolute', top: -120, right: -115, height: 290, width: 290, borderRadius: 145, backgroundColor: colors.mintPale },
+  homeScroll: { flexGrow: 1 },
+  homeShell: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingTop: Platform.OS === 'ios' ? 58 : 36, paddingHorizontal: 20, paddingBottom: 36 },
+  homeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  homeKicker: { color: colors.muted, fontSize: 8, lineHeight: 12, fontWeight: '900', letterSpacing: 1.1 },
+  homeTitle: { color: colors.ink, fontSize: 19, lineHeight: 23, fontWeight: '900', letterSpacing: -0.45 },
+  homeAvatar: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.coral, borderWidth: 2, borderColor: colors.paper },
+  homeAvatarText: { color: colors.ink, fontSize: 10, fontWeight: '900' },
+  welcomeCard: { flexDirection: 'row', gap: 13, marginTop: 31, padding: 18, borderRadius: 20, backgroundColor: colors.mintPale, borderWidth: 1, borderColor: '#CFE9DF' },
+  welcomeIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
+  welcomeIconText: { color: colors.mint, fontSize: 19, fontWeight: '900', marginTop: -2 },
+  welcomeCopy: { flex: 1 },
+  welcomeEyebrow: { color: colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1.15, marginBottom: 4 },
+  welcomeTitle: { color: colors.ink, fontSize: 17, fontWeight: '900', letterSpacing: -0.35 },
+  welcomeText: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 4 },
+  tabBar: { flexDirection: 'row', gap: 5, marginTop: 24, padding: 5, borderRadius: 16, backgroundColor: '#F1F2EB', borderWidth: 1, borderColor: colors.line },
+  tabBarNarrow: { gap: 3, padding: 4 },
+  tab: { flex: 1, minHeight: 39, paddingHorizontal: 7, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  tabActive: { backgroundColor: colors.paper, shadowColor: colors.ink, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  tabText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  tabTextActive: { color: colors.ink },
+  membersCard: { marginTop: 18, padding: 21, borderRadius: 24, backgroundColor: colors.paper, borderWidth: 1, borderColor: '#EEF1EE', shadowColor: '#28443E', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 3 },
+  membersHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  membersKicker: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.25 },
+  membersTitle: { color: colors.ink, fontSize: 23, lineHeight: 29, fontWeight: '900', letterSpacing: -0.75, marginTop: 4 },
+  memberCount: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: '#FFF0E8' },
+  memberCountText: { color: colors.coralDark, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 },
+  membersIntro: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 12 },
+  memberList: { marginTop: 19, borderTopWidth: 1, borderTopColor: colors.line },
+  memberRow: { minHeight: 65, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
+  memberAvatar: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  memberAvatarText: { color: colors.ink, fontSize: 10, fontWeight: '900' },
+  memberName: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: '800' },
+  youLabel: { color: colors.coralDark, fontSize: 13, fontWeight: '800' },
+  herePill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.mintPale },
+  hereText: { color: colors.ink, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  placeholderCard: { alignItems: 'flex-start', marginTop: 18, padding: 23, borderRadius: 24, backgroundColor: colors.paper, borderWidth: 1, borderColor: '#EEF1EE' },
+  placeholderIcon: { width: 39, height: 39, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.mintPale, marginBottom: 18 },
+  placeholderIconText: { color: colors.ink, fontSize: 18, fontWeight: '900' },
+  placeholderTitle: { color: colors.ink, fontSize: 21, lineHeight: 27, fontWeight: '900', letterSpacing: -0.55, marginTop: 5 },
+  placeholderText: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 8 },
 });
