@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -23,13 +23,11 @@ const roommates = [
 ] as const;
 
 export default function App() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
 
-  const showComingSoon = (action: string) => Alert.alert(
-    `${action} is next`,
-    'The landing page is ready. Connect this button to the household onboarding flow on its feature branch.',
-  );
+  const showComingSoon = (route: '/create' | '/join') => router.push(route);
 
   return (
     <View style={styles.screen}>
@@ -65,7 +63,7 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create a household"
-                  onPress={() => showComingSoon('Household setup')}
+                  onPress={() => showComingSoon('/create')}
                   style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.primaryButtonText}>Create a household</Text>
@@ -74,7 +72,7 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Join with an invite code"
-                  onPress={() => showComingSoon('Invite codes')}
+                  onPress={() => showComingSoon('/join')}
                   style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.secondaryButtonText}>Join with a code</Text>
