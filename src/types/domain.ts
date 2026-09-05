@@ -1,5 +1,13 @@
+export type Household = {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdAt: string;
+};
+
 export type Member = {
   id: string;
+  householdId: string;
   displayName: string;
   avatarColor: string;
 };
