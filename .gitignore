@@ -43,3 +43,5 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+# Local output from the dependency-free fairness unit tests.
+.test-dist/

@@ -48,6 +48,8 @@ export interface PulseResponse extends PulseScores {
   weekStart: ISODateString;
 }
 
+export type PulseCategory = keyof PulseScores;
+
 export interface HouseholdSession {
   guestId: string;
   householdId: string;

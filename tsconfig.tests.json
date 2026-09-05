@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "rootDir": "src",
+    "outDir": ".test-dist"
+  },
+  "include": ["src/fairness/engine.ts", "src/fairness/engine.test.ts", "src/types/domain.ts"]
+}
