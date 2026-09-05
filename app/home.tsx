@@ -4,16 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../src/components/AppHeader';
 import { useHouseholdSession } from '../src/context/HouseholdSessionContext';
+import { ChoreBoard } from '../src/features/chores/ChoreBoard';
 import { colors, spacing } from '../src/theme/tokens';
 
 const tabs = ['Chores', 'Balance', 'Pulse'] as const;
 type Tab = typeof tabs[number];
-
-const chores = [
-  { title: 'Take out recycling', points: 2, color: colors.mint },
-  { title: 'Wipe kitchen counters', points: 3, color: colors.yellow },
-  { title: 'Clean the bathroom', points: 6, color: colors.coral },
-];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -48,10 +43,7 @@ export default function HomeScreen() {
 }
 
 function DemoPanel({ activeTab, pulseSent, onPulse }: { activeTab: Tab; pulseSent: boolean; onPulse: () => void }) {
-  if (activeTab === 'Chores') return <View style={styles.panel}>
-    <View style={styles.panelHeading}><View><Text style={styles.panelKicker}>THIS WEEK</Text><Text style={styles.panelTitle}>Small things, shared fairly.</Text></View><Text style={styles.count}>3 TO GO</Text></View>
-    {chores.map((chore) => <View key={chore.title} style={styles.chore}><View style={[styles.choreDot, { backgroundColor: chore.color }]}><Text style={styles.check}>✓</Text></View><Text style={styles.choreTitle}>{chore.title}</Text><Text style={styles.points}>{chore.points} pts</Text></View>)}
-  </View>;
+  if (activeTab === 'Chores') return <ChoreBoard />;
 
   if (activeTab === 'Balance') return <View style={styles.panel}>
     <View style={styles.panelHeading}><View><Text style={styles.panelKicker}>HOUSEHOLD BALANCE</Text><Text style={styles.panelTitle}>A gentle nudge.</Text></View><View style={styles.nudge}><Text style={styles.nudgeText}>NEEDS A NUDGE</Text></View></View>
@@ -89,12 +81,6 @@ const styles = StyleSheet.create({
   panelHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   panelKicker: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   panelTitle: { marginTop: 5, color: colors.ink, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  count: { color: colors.ink, backgroundColor: colors.mintPale, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  chore: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#EEF1EE' },
-  choreDot: { width: 27, height: 27, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  check: { color: colors.ink, fontSize: 12, fontWeight: '900' },
-  choreTitle: { flex: 1, color: colors.ink, fontSize: 14, fontWeight: '700' },
-  points: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   nudge: { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 999, backgroundColor: '#FFF0E8' },
   nudgeText: { color: colors.coralDark, fontSize: 8, fontWeight: '900', letterSpacing: 0.7 },
   balanceCopy: { color: colors.muted, marginTop: spacing.sm, fontSize: 14, lineHeight: 21 },
