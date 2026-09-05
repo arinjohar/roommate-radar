@@ -24,7 +24,7 @@ const roommates = [
 ] as const;
 
 const householdMembers = [
-  { id: 'aanya', name: 'Aanya', initials: 'AC', color: colors.coral, isCurrentUser: true },
+  { id: 'current-user', name: '<user>', initials: 'YU', color: colors.coral, isCurrentUser: true },
   { id: 'jamie', name: 'Jamie', initials: 'JM', color: colors.mint, isCurrentUser: false },
   { id: 'sam', name: 'Sam', initials: 'SK', color: colors.yellow, isCurrentUser: false },
   { id: 'alex', name: 'Alex', initials: 'AR', color: '#B8C8EE', isCurrentUser: false },
@@ -186,14 +186,14 @@ function HouseholdHome({ onExit }: { onExit: () => void }) {
                 <Text style={styles.homeTitle}>Maple House</Text>
               </View>
             </Pressable>
-            <View style={styles.homeAvatar}><Text style={styles.homeAvatarText}>AC</Text></View>
+            <View style={styles.homeAvatar}><Text style={styles.homeAvatarText}>YU</Text></View>
           </View>
 
           <View style={styles.welcomeCard}>
             <View style={styles.welcomeIcon}><Text style={styles.welcomeIconText}>⌂</Text></View>
             <View style={styles.welcomeCopy}>
               <Text style={styles.welcomeEyebrow}>HOUSEHOLD READY</Text>
-              <Text style={styles.welcomeTitle}>You’re all set, Aanya.</Text>
+              <Text style={styles.welcomeTitle}>You’re all set, {'<user>'}.</Text>
               <Text style={styles.welcomeText}>A small view of the shared work, made for kinder check-ins.</Text>
             </View>
           </View>
