@@ -6,9 +6,10 @@ import { AppHeader } from '../src/components/AppHeader';
 import { useHouseholdSession } from '../src/context/HouseholdSessionContext';
 import { ChoreBoard } from '../src/features/chores/ChoreBoard';
 import { FairnessPanel } from '../src/features/fairness/FairnessPanel';
+import { MembersPanel } from '../src/features/members/MembersPanel';
 import { colors, spacing } from '../src/theme/tokens';
 
-const tabs = ['Chores', 'Balance', 'Pulse'] as const;
+const tabs = ['Chores', 'Balance', 'Pulse', 'Members'] as const;
 type Tab = typeof tabs[number];
 
 export default function HomeScreen() {
@@ -44,6 +45,7 @@ export default function HomeScreen() {
 
 function DemoPanel({ activeTab, householdId, memberId }: { activeTab: Tab; householdId: string; memberId: string }) {
   if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} memberId={memberId} />;
+  if (activeTab === 'Members') return <MembersPanel householdId={householdId} currentMemberId={memberId} />;
   return <FairnessPanel householdId={householdId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
 
