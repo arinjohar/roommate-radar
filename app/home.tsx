@@ -36,15 +36,15 @@ export default function HomeScreen() {
       <Text style={styles.next}>A calmer week starts here.</Text>
       <Text style={styles.nextCopy}>Here’s a friendly, at-a-glance demo of the work your household is sharing.</Text>
       <View style={styles.tabRow}>{tabs.map((tab) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}><Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text></Pressable>)}</View>
-      <DemoPanel activeTab={activeTab} />
+      <DemoPanel activeTab={activeTab} householdId={session.household.id} memberId={session.member.id} />
       <Pressable accessibilityRole="button" onPress={() => { clearSession(); router.replace('/'); }} style={styles.reset}><Text style={styles.resetText}>Leave this demo household</Text></Pressable>
     </ScrollView>
   </View>;
 }
 
-function DemoPanel({ activeTab }: { activeTab: Tab }) {
-  if (activeTab === 'Chores') return <ChoreBoard />;
-  return <FairnessPanel mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
+function DemoPanel({ activeTab, householdId, memberId }: { activeTab: Tab; householdId: string; memberId: string }) {
+  if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} memberId={memberId} />;
+  return <FairnessPanel householdId={householdId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
 
 const styles = StyleSheet.create({

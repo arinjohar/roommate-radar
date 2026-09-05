@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { householdService, type CreateHouseholdInput, type HouseholdSession, type JoinHouseholdInput } from '../services/householdService';
 
@@ -14,6 +14,14 @@ const HouseholdSessionContext = createContext<HouseholdSessionContextValue | nul
 export function HouseholdSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<HouseholdSession | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    householdService.loadSession()
+      .then((saved) => { if (active) setSession(saved); })
+      .catch(() => { if (active) setSession(null); });
+    return () => { active = false; };
+  }, []);
+
   const value = useMemo(() => ({
     session,
     async createHousehold(input: CreateHouseholdInput) {
@@ -24,6 +32,7 @@ export function HouseholdSessionProvider({ children }: PropsWithChildren) {
     },
     clearSession() {
       setSession(null);
+      void householdService.clearSession();
     },
   }), [session]);
 

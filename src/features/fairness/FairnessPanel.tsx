@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   calculateMemberEffort,
@@ -7,48 +7,64 @@ import {
   getPulseInsight,
   suggestRebalance,
 } from '../../fairness/engine';
+import { services } from '../../services';
 import { colors, spacing } from '../../theme/tokens';
 import type { Chore, Completion, Member, PulseResponse } from '../../types/domain';
 
-const householdId = 'maple-house';
-const weekStart = '2026-08-31';
+function currentWeek() {
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+  return {
+    weekStart: start.toISOString().slice(0, 10),
+    from: start.toISOString(),
+    to: end.toISOString(),
+  };
+}
 
-const members: Member[] = [
-  { id: 'jamie', householdId, displayName: 'Jamie', avatarColor: colors.coral },
-  { id: 'sam', householdId, displayName: 'Sam', avatarColor: colors.mint },
-  { id: 'alex', householdId, displayName: 'Alex', avatarColor: colors.yellow },
-  { id: 'morgan', householdId, displayName: 'Morgan', avatarColor: '#B9B2E8' },
-];
-
-const completions: Completion[] = [
-  { id: 'c1', choreId: 'bathroom', memberId: 'jamie', pointsAwarded: 6, completedAt: '2026-09-01T18:00:00.000Z' },
-  { id: 'c2', choreId: 'floors', memberId: 'jamie', pointsAwarded: 5, completedAt: '2026-09-02T18:00:00.000Z' },
-  { id: 'c3', choreId: 'kitchen', memberId: 'sam', pointsAwarded: 3, completedAt: '2026-09-03T18:00:00.000Z' },
-  { id: 'c4', choreId: 'mail', memberId: 'alex', pointsAwarded: 2, completedAt: '2026-09-04T18:00:00.000Z' },
-];
-
-const chores: Chore[] = [
-  { id: 'bathroom', householdId, title: 'Clean the bathroom', points: 6, assigneeId: 'jamie', dueAt: '2026-09-01T18:00:00.000Z', recurrence: 'weekly' },
-  { id: 'floors', householdId, title: 'Vacuum shared spaces', points: 5, assigneeId: 'jamie', dueAt: '2026-09-02T18:00:00.000Z', recurrence: 'weekly' },
-  { id: 'kitchen', householdId, title: 'Wipe down the kitchen', points: 3, assigneeId: 'sam', dueAt: '2026-09-03T18:00:00.000Z', recurrence: 'weekly' },
-  { id: 'mail', householdId, title: 'Sort the mail', points: 2, assigneeId: 'alex', dueAt: '2026-09-04T18:00:00.000Z', recurrence: 'weekly' },
-  { id: 'recycling', householdId, title: 'Take out recycling', points: 2, assigneeId: 'morgan', dueAt: '2026-09-06T18:00:00.000Z', recurrence: 'weekly' },
-];
-
-const startingPulses: PulseResponse[] = [
-  { id: 'p1', householdId, memberId: 'jamie', weekStart, cleanliness: 4, noise: 2, communication: 4 },
-  { id: 'p2', householdId, memberId: 'sam', weekStart, cleanliness: 3, noise: 2, communication: 3 },
-  { id: 'p3', householdId, memberId: 'alex', weekStart, cleanliness: 4, noise: 3, communication: 3 },
-];
-
-export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
+export function FairnessPanel({ householdId, mode }: { householdId: string; mode: 'balance' | 'pulse' }) {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [chores, setChores] = useState<Chore[]>([]);
+  const [completions, setCompletions] = useState<Completion[]>([]);
+  const [responses, setResponses] = useState<PulseResponse[]>([]);
   const [ratings, setRatings] = useState({ cleanliness: 3, noise: 3, communication: 3 });
-  const [responses, setResponses] = useState(startingPulses);
   const [submitted, setSubmitted] = useState(false);
-  const effort = useMemo(() => calculateMemberEffort(members, completions), []);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const week = useMemo(currentWeek, []);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    Promise.all([
+      services.households.listMembers(householdId),
+      services.chores.list(householdId),
+      services.chores.listCompletions(householdId, week.from, week.to),
+      services.pulse.list(householdId, week.weekStart),
+    ]).then(([nextMembers, nextChores, nextCompletions, nextResponses]) => {
+      if (!active) return;
+      setMembers(nextMembers);
+      setChores(nextChores);
+      setCompletions(nextCompletions);
+      setResponses(nextResponses);
+      setError(null);
+    }).catch(() => {
+      if (active) setError('We could not load the household picture. Please try again.');
+    }).finally(() => {
+      if (active) setIsLoading(false);
+    });
+    return () => { active = false; };
+  }, [householdId, week]);
+
+  const effort = useMemo(() => calculateMemberEffort(members, completions), [members, completions]);
   const status = getFairnessStatus(effort);
   const suggestion = suggestRebalance(effort, chores, completions);
   const insight = getPulseInsight(responses);
+
+  if (isLoading) return <View style={styles.loading}><ActivityIndicator color={colors.coral} /></View>;
+  if (error) return <View style={styles.error}><Text style={styles.body}>{error}</Text></View>;
 
   if (mode === 'balance') {
     return <View style={styles.stack}>
@@ -57,7 +73,7 @@ export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
         <View style={styles.status}><Text style={styles.statusText}>{status === 'balanced' ? 'In balance' : 'Needs a nudge'}</Text></View>
       </View>
       <View style={styles.card}>
-        {effort.map((member) => {
+        {effort.length === 0 ? <Text style={styles.body}>Invite a roommate to start seeing the household balance.</Text> : effort.map((member) => {
           const fill = member.expected ? Math.min(member.actual / (member.expected * 1.6), 1) * 100 : 0;
           return <View key={member.id} style={styles.effortRow}>
             <View style={[styles.avatar, { backgroundColor: member.avatarColor }]}><Text style={styles.avatarText}>{member.displayName.slice(0, 2).toUpperCase()}</Text></View>
@@ -67,7 +83,7 @@ export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
             </View>
           </View>;
         })}
-        <Text style={styles.note}>The shared pace is {effort[0]?.expected.toFixed(1) ?? '0'} points per roommate.</Text>
+        {effort.length > 0 ? <Text style={styles.note}>The shared pace is {effort[0].expected.toFixed(1)} points per roommate.</Text> : null}
       </View>
       {suggestion ? <View style={styles.insight}>
         <View style={styles.insightIcon}><Text style={styles.spark}>✦</Text></View>
@@ -77,16 +93,21 @@ export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
     </View>;
   }
 
-  const submit = () => {
+  const submit = async () => {
     if (submitted) return;
-    setResponses((current) => [...current, { id: 'p4', householdId, memberId: 'morgan', weekStart, ...ratings }]);
-    setSubmitted(true);
+    try {
+      const response = await services.pulse.submit(householdId, week.weekStart, ratings);
+      setResponses((current) => [...current.filter((item) => item.memberId !== response.memberId), response]);
+      setSubmitted(true);
+    } catch {
+      setError('We could not share that check-in. Please try again.');
+    }
   };
 
   return <View style={styles.stack}>
     <View style={styles.insight}>
       <View style={styles.insightIcon}><Text style={styles.spark}>✦</Text></View>
-      <View style={styles.insightCopy}><Text style={styles.kicker}>HOUSEHOLD INSIGHT</Text><Text style={styles.body}>{insight?.message}</Text></View>
+      <View style={styles.insightCopy}><Text style={styles.kicker}>HOUSEHOLD INSIGHT</Text><Text style={styles.body}>{insight?.message ?? 'Once the house checks in, a shared pattern will appear here.'}</Text></View>
     </View>
     <View style={styles.card}>
       <Text style={styles.kicker}>YOUR PRIVATE CHECK-IN</Text>
@@ -103,7 +124,7 @@ export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
           style={[styles.rating, ratings[category] === rating && styles.ratingSelected]}
         ><Text style={[styles.ratingText, ratings[category] === rating && styles.ratingTextSelected]}>{rating}</Text></Pressable>)}</View>
       </View>)}
-      <Pressable accessibilityRole="button" disabled={submitted} onPress={submit} style={[styles.submit, submitted && styles.submitDone]}>
+      <Pressable accessibilityRole="button" disabled={submitted} onPress={() => void submit()} style={[styles.submit, submitted && styles.submitDone]}>
         <Text style={styles.submitText}>{submitted ? 'Check-in shared ✓' : 'Share my check-in'}</Text>
       </Pressable>
     </View>
@@ -112,6 +133,8 @@ export function FairnessPanel({ mode }: { mode: 'balance' | 'pulse' }) {
 
 const styles = StyleSheet.create({
   stack: { marginTop: spacing.md, gap: spacing.md },
+  loading: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
+  error: { marginTop: spacing.md, padding: spacing.md, borderRadius: 18, backgroundColor: '#FFF0E8' },
   heading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm },
   kicker: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 5 },
   title: { color: colors.ink, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },

@@ -1,43 +1,57 @@
-export type Household = {
+export type ISODateString = string;
+export type ISODateTimeString = string;
+
+export type ChoreRecurrence = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+export interface Household {
   id: string;
   name: string;
   inviteCode: string;
-  createdAt: string;
-};
+  createdAt: ISODateTimeString;
+}
 
-export type Member = {
+export interface Member {
   id: string;
   householdId: string;
   displayName: string;
   avatarColor: string;
-};
+}
 
-export type Chore = {
+export interface Chore {
   id: string;
   householdId: string;
   title: string;
   points: number;
-  assigneeId: string;
-  dueAt: string;
-  recurrence: string;
-};
+  assigneeId: string | null;
+  dueAt: ISODateTimeString;
+  recurrence: ChoreRecurrence;
+}
 
-export type Completion = {
+export interface Completion {
   id: string;
   choreId: string;
   memberId: string;
   pointsAwarded: number;
-  completedAt: string;
-};
+  completedAt: ISODateTimeString;
+}
 
-export type PulseResponse = {
-  id: string;
-  householdId: string;
-  memberId: string;
-  weekStart: string;
+export interface PulseScores {
   cleanliness: number;
   noise: number;
   communication: number;
-};
+}
 
-export type PulseCategory = 'cleanliness' | 'noise' | 'communication';
+export interface PulseResponse extends PulseScores {
+  id: string;
+  householdId: string;
+  memberId: string;
+  weekStart: ISODateString;
+}
+
+export type PulseCategory = keyof PulseScores;
+
+export interface HouseholdSession {
+  guestId: string;
+  householdId: string;
+  memberId: string;
+}

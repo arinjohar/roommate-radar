@@ -6,8 +6,8 @@ function equal<T>(actual: T, expected: T, description: string) {
 }
 
 const members: Member[] = [
-  { id: 'a', householdId: 'house', displayName: 'Ari', avatarColor: '#fff' },
-  { id: 'b', householdId: 'house', displayName: 'Bea', avatarColor: '#000' },
+  { id: 'a', householdId: 'house', displayName: 'Ari', avatarColor: '#FFFFFF' },
+  { id: 'b', householdId: 'house', displayName: 'Bea', avatarColor: '#000000' },
 ];
 const completions: Completion[] = [
   { id: 'one', choreId: 'done', memberId: 'a', pointsAwarded: 8, completedAt: '2026-09-01T10:00:00.000Z' },

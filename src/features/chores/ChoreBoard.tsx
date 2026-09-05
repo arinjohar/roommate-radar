@@ -96,7 +96,7 @@ export function ChoreCard({ chore, completion, isCompleting, onComplete }: Chore
   const isComplete = Boolean(completion);
   const dueDate = new Date(chore.dueAt);
   const due = dueDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-  const assignee = memberNames[chore.assigneeId] ?? 'A roommate';
+  const assignee = chore.assigneeId ? (memberNames[chore.assigneeId] ?? 'A roommate') : 'Anyone';
 
   return <View style={[styles.card, isComplete && styles.cardComplete]}>
     <View style={styles.cardTop}>

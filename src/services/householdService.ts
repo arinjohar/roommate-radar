@@ -1,9 +1,7 @@
-import type { Household, Member } from '../types/domain';
+import type { HouseholdMembership } from './contracts';
+import { services } from './index';
 
-export type HouseholdSession = {
-  household: Household;
-  member: Member;
-};
+export type HouseholdSession = HouseholdMembership;
 
 export type CreateHouseholdInput = {
   householdName: string;
@@ -15,43 +13,52 @@ export type JoinHouseholdInput = {
   displayName: string;
 };
 
-export interface HouseholdService {
-  createHousehold(input: CreateHouseholdInput): Promise<HouseholdSession>;
-  joinHousehold(input: JoinHouseholdInput): Promise<HouseholdSession>;
-}
-
 const avatarColors = ['#F36F56', '#9ED9C5', '#F4C95D'];
 
-const compactId = () => Math.random().toString(36).slice(2, 10);
+function avatarColorFor(displayName: string) {
+  return avatarColors[displayName.trim().length % avatarColors.length];
+}
 
-const makeSession = (householdName: string, displayName: string, inviteCode: string): HouseholdSession => {
-  const householdId = `household-${compactId()}`;
+async function persistMembership(membership: HouseholdMembership) {
+  await services.session.save({
+    guestId: membership.member.id,
+    householdId: membership.household.id,
+    memberId: membership.member.id,
+  });
+  return membership;
+}
 
-  return {
-    household: {
-      id: householdId,
-      name: householdName,
-      inviteCode,
-      createdAt: new Date().toISOString(),
-    },
-    member: {
-      id: `member-${compactId()}`,
-      householdId,
-      displayName,
-      avatarColor: avatarColors[displayName.length % avatarColors.length],
-    },
-  };
-};
-
-/**
- * Deliberately small boundary for the future persistence adapter. Screens only
- * depend on this interface, so a Supabase-backed implementation can replace it.
- */
-export const householdService: HouseholdService = {
-  async createHousehold({ householdName, displayName }) {
-    return makeSession(householdName, displayName, `HOME-${compactId().slice(0, 4).toUpperCase()}`);
+export const householdService = {
+  async createHousehold(input: CreateHouseholdInput): Promise<HouseholdSession> {
+    const membership = await services.households.create({
+      ...input,
+      avatarColor: avatarColorFor(input.displayName),
+    });
+    return persistMembership(membership);
   },
-  async joinHousehold({ inviteCode, displayName }) {
-    return makeSession('Your shared home', displayName, inviteCode.trim().toUpperCase());
+
+  async joinHousehold(input: JoinHouseholdInput): Promise<HouseholdSession> {
+    const membership = await services.households.join({
+      ...input,
+      avatarColor: avatarColorFor(input.displayName),
+    });
+    return persistMembership(membership);
   },
+
+  async loadSession(): Promise<HouseholdSession | null> {
+    const saved = await services.session.load();
+    if (!saved) return null;
+    const [household, members] = await Promise.all([
+      services.households.get(saved.householdId),
+      services.households.listMembers(saved.householdId),
+    ]);
+    const member = members.find((candidate) => candidate.id === saved.memberId);
+    if (!household || !member) {
+      await services.session.clear();
+      return null;
+    }
+    return { household, member };
+  },
+
+  clearSession: () => services.session.clear(),
 };
