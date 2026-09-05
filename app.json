@@ -6,7 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.roommateradar.app" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.roommateradar.app"
+    },
     "android": {
       "package": "com.roommateradar.app",
       "adaptiveIcon": {
@@ -17,6 +20,14 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "web": { "favicon": "./assets/favicon.png" }
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f9ebb69e-6b4e-4e21-8123-82517159cd43"
+      }
+    },
+    "owner": "arjohar"
   }
 }
