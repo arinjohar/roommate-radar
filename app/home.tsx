@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppHeader } from '../src/components/AppHeader';
 import { useHouseholdSession } from '../src/context/HouseholdSessionContext';
 import { ChoreBoard } from '../src/features/chores/ChoreBoard';
+import { FairnessPanel } from '../src/features/fairness/FairnessPanel';
 import { colors, spacing } from '../src/theme/tokens';
 
 const tabs = ['Chores', 'Balance', 'Pulse'] as const;
@@ -14,7 +15,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const { session, clearSession } = useHouseholdSession();
   const [activeTab, setActiveTab] = useState<Tab>('Chores');
-  const [pulseSent, setPulseSent] = useState(false);
   if (!session) return <Redirect href="/" />;
 
   const initial = session.member.displayName.slice(0, 1).toUpperCase();
@@ -36,26 +36,15 @@ export default function HomeScreen() {
       <Text style={styles.next}>A calmer week starts here.</Text>
       <Text style={styles.nextCopy}>Here’s a friendly, at-a-glance demo of the work your household is sharing.</Text>
       <View style={styles.tabRow}>{tabs.map((tab) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}><Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text></Pressable>)}</View>
-      <DemoPanel activeTab={activeTab} pulseSent={pulseSent} onPulse={() => setPulseSent(true)} />
+      <DemoPanel activeTab={activeTab} />
       <Pressable accessibilityRole="button" onPress={() => { clearSession(); router.replace('/'); }} style={styles.reset}><Text style={styles.resetText}>Leave this demo household</Text></Pressable>
     </ScrollView>
   </View>;
 }
 
-function DemoPanel({ activeTab, pulseSent, onPulse }: { activeTab: Tab; pulseSent: boolean; onPulse: () => void }) {
+function DemoPanel({ activeTab }: { activeTab: Tab }) {
   if (activeTab === 'Chores') return <ChoreBoard />;
-
-  if (activeTab === 'Balance') return <View style={styles.panel}>
-    <View style={styles.panelHeading}><View><Text style={styles.panelKicker}>HOUSEHOLD BALANCE</Text><Text style={styles.panelTitle}>A gentle nudge.</Text></View><View style={styles.nudge}><Text style={styles.nudgeText}>NEEDS A NUDGE</Text></View></View>
-    <Text style={styles.balanceCopy}>Jamie has carried more of the cleanup this week. Passing one small chore to Sam would bring the effort closer together.</Text>
-    <View style={styles.suggestion}><Text style={styles.suggestionLabel}>ONE KIND SWAP</Text><Text style={styles.suggestionText}>Sam takes “Wipe kitchen counters” · 3 points</Text></View>
-  </View>;
-
-  return <View style={styles.panel}>
-    <Text style={styles.panelKicker}>WEEKLY PULSE</Text><Text style={styles.panelTitle}>{pulseSent ? 'Thanks for checking in.' : 'How’s the house feeling?'}</Text>
-    <Text style={styles.balanceCopy}>{pulseSent ? 'Your private pulse helps the household notice small tensions early.' : 'A two-second, private check-in keeps the signal clear without turning it into a scoreboard.'}</Text>
-    {pulseSent ? <View style={styles.sent}><Text style={styles.sentText}>✓ Pulse shared</Text></View> : <Pressable accessibilityRole="button" onPress={onPulse} style={styles.pulseButton}><Text style={styles.pulseButtonText}>Pretty good this week</Text><Text style={styles.pulseArrow}>→</Text></Pressable>}
-  </View>;
+  return <FairnessPanel mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
 
 const styles = StyleSheet.create({

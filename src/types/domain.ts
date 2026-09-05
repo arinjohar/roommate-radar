@@ -39,3 +39,5 @@ export type PulseResponse = {
   noise: number;
   communication: number;
 };
+
+export type PulseCategory = 'cleanliness' | 'noise' | 'communication';
