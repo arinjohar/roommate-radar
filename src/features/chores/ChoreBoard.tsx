@@ -9,37 +9,26 @@ import {
   View,
 } from 'react-native';
 import type { Chore, Completion } from '../../types/domain';
-import { services as appServices } from '../../services';
 import {
-  choreService,
-  DEMO_HOUSEHOLD_MEMBER_IDS,
-  DEMO_HOUSEHOLD_ID,
-  DEMO_MEMBER_ID,
+  services,
   type ChoreBoardSnapshot,
   type ChoreStarter,
   type ChoreService,
   type PendingChore,
   type PendingTrustChange,
   type TrustLevel,
-} from '../../services/choreService';
+} from '../../services';
 
 const colors = {
   ink: '#132A2E', muted: '#5B6E70', cream: '#FFF9F0', paper: '#FFFFFF',
   coral: '#F36F56', mint: '#9ED9C5', mintPale: '#E3F4ED', yellow: '#F4C95D', line: '#DCE6E2',
 };
 
-const memberNames: Record<string, string> = {
-  everyone: 'Everyone',
-  [DEMO_HOUSEHOLD_MEMBER_IDS[0]]: 'Jamie',
-  [DEMO_HOUSEHOLD_MEMBER_IDS[1]]: 'Sam',
-  [DEMO_HOUSEHOLD_MEMBER_IDS[2]]: 'Alex',
-  [DEMO_HOUSEHOLD_MEMBER_IDS[3]]: 'Riley',
-};
-function viewerMemberName(memberId: string, viewerId: string, names: Record<string, string> = memberNames) {
+function viewerMemberName(memberId: string, viewerId: string, names: Record<string, string>) {
   return memberId === viewerId ? 'You' : names[memberId] ?? 'A roommate';
 }
 
-function assigneeLabel(assigneeIds: string[], viewerId: string, names: Record<string, string> = memberNames) {
+function assigneeLabel(assigneeIds: string[], viewerId: string, names: Record<string, string>) {
   if (assigneeIds.length === 0) return 'Everyone';
   return assigneeIds.map((id) => viewerMemberName(id, viewerId, names)).join(' and ');
 }
@@ -81,15 +70,15 @@ function dueIntervalLabel(dueInDays: number | null) {
 }
 
 type ChoreBoardProps = {
-  householdId?: string;
-  memberId?: string;
+  householdId: string;
+  memberId: string;
   service?: ChoreService;
 };
 
 export function ChoreBoard({
-  householdId = DEMO_HOUSEHOLD_ID,
-  memberId = DEMO_MEMBER_ID,
-  service = choreService,
+  householdId,
+  memberId,
+  service = services.chores,
 }: ChoreBoardProps) {
   const [chores, setChores] = useState<Chore[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
@@ -118,8 +107,8 @@ export function ChoreBoard({
   const [visibleList, setVisibleList] = useState<'active' | 'completed' | 'pending'>('active');
   const [pendingChores, setPendingChores] = useState<PendingChore[]>([]);
   const [pendingTrustChanges, setPendingTrustChanges] = useState<PendingTrustChange[]>([]);
-  const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>(DEMO_HOUSEHOLD_MEMBER_IDS);
-  const [householdMemberNames, setHouseholdMemberNames] = useState<Record<string, string>>(memberNames);
+  const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>([]);
+  const [householdMemberNames, setHouseholdMemberNames] = useState<Record<string, string>>({});
   const [completedByFilter, setCompletedByFilter] = useState<string>('all');
   const matchingStarters = showSuggestions && newTitle.trim()
     ? choreStarters.filter((starter) => starter.title.toLowerCase().includes(newTitle.trim().toLowerCase()))
@@ -149,13 +138,11 @@ export function ChoreBoard({
     setIsLoading(true);
     setError(null);
     try {
-      const members = await appServices.households.listMembers(householdId);
-      if (members.length > 0) {
-        const memberIds = members.map((member) => member.id);
-        await service.setHouseholdMembers(householdId, memberIds);
-        setHouseholdMemberIds(memberIds);
-        setHouseholdMemberNames(Object.fromEntries(members.map((member) => [member.id, member.displayName])));
-      }
+      const members = await services.households.listMembers(householdId);
+      setHouseholdMemberIds(members.map((member) => member.id));
+      setHouseholdMemberNames(
+        Object.fromEntries(members.map((member) => [member.id, member.displayName])),
+      );
       applySnapshot(await service.getBoard(householdId));
     } catch {
       setError('We could not load this week’s chores. Please try again.');
@@ -323,7 +310,7 @@ export function ChoreBoard({
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.boardHeader}><Text style={styles.eyebrow}>MAPLE HOUSE · THIS WEEK</Text><Pressable accessibilityRole="button" accessibilityLabel="Open chore board settings" onPress={() => { setIsSavedOptionsOpen(false); setIsTrustLevelOpen(false); setIsCompletedHistoryOpen(false); setIsSettingsOpen(true); }} style={styles.settingsButton}><Text style={styles.settingsGear}>⚙</Text><View pointerEvents="none" style={styles.settingsGearCenter} /></Pressable></View>
+        <View style={styles.boardHeader}><Text style={styles.eyebrow}>THIS WEEK</Text><Pressable accessibilityRole="button" accessibilityLabel="Open chore board settings" onPress={() => { setIsSavedOptionsOpen(false); setIsTrustLevelOpen(false); setIsCompletedHistoryOpen(false); setIsSettingsOpen(true); }} style={styles.settingsButton}><Text style={styles.settingsGear}>⚙</Text><View pointerEvents="none" style={styles.settingsGearCenter} /></Pressable></View>
         <Text style={styles.title}>A little shared effort goes a long way.</Text>
         <Text style={styles.subtitle}>Mark a task when it’s done so the household picture stays kind and clear.</Text>
 
@@ -347,7 +334,7 @@ export function ChoreBoard({
           {isDetailsOpen ? <View>
             <View style={styles.pointRow}><Text style={styles.pointLabel}>Effort points</Text><View style={styles.stepper}><Pressable accessibilityRole="button" accessibilityLabel="Decrease effort points" disabled={newPoints === 1} onPress={() => setNewPoints((points) => Math.max(1, points - 1))} style={[styles.stepButton, newPoints === 1 && styles.stepButtonDisabled]}><Text style={styles.stepText}>−</Text></Pressable><Text accessibilityLabel={`${newPoints} effort points`} style={styles.stepValue}>{newPoints}</Text><Pressable accessibilityRole="button" accessibilityLabel="Increase effort points" disabled={newPoints === 10} onPress={() => setNewPoints((points) => Math.min(10, points + 1))} style={[styles.stepButton, newPoints === 10 && styles.stepButtonDisabled]}><Text style={styles.stepText}>+</Text></Pressable></View></View>
             <Text style={styles.assignmentLabel}>Assign to</Text>
-            <View style={styles.assignmentChoices}>{['everyone', ...householdMemberIds].map((id) => <FilterButton key={id} label={id === 'everyone' ? memberNames[id] : viewerMemberName(id, memberId, householdMemberNames)} selected={assigneeIds.includes(id)} onPress={() => toggleAssignee(id)} />)}</View>
+            <View style={styles.assignmentChoices}>{['everyone', ...householdMemberIds].map((id) => <FilterButton key={id} label={id === 'everyone' ? 'Everyone' : viewerMemberName(id, memberId, householdMemberNames)} selected={assigneeIds.includes(id)} onPress={() => toggleAssignee(id)} />)}</View>
             <Text style={styles.assignmentLabel}>Due date</Text>
             <TextInput accessibilityLabel="Due date" value={dueDate} onChangeText={setDueDate} placeholder="YYYY-MM-DD" placeholderTextColor="#728285" style={styles.choreInput} />
             <Text style={styles.assignmentLabel}>Schedule</Text>
