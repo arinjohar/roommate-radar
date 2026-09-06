@@ -14,7 +14,7 @@ type Tab = typeof tabs[number];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { session, clearSession } = useHouseholdSession();
+  const { session, clearSession, memberships, selectMembership } = useHouseholdSession();
   const [activeTab, setActiveTab] = useState<Tab>('Chores');
   if (!session) return <Redirect href="/" />;
 
@@ -34,6 +34,22 @@ export default function HomeScreen() {
         <Text style={styles.inviteCode}>{session.household.inviteCode}</Text>
         <Text style={styles.inviteCopy}>Send it to your roommates so everyone starts from the same calm, shared view.</Text>
       </View>
+      {memberships.length > 1 ? <View style={styles.householdList}>
+        <Text style={styles.householdListLabel}>YOUR HOUSEHOLDS</Text>
+        {memberships.map((membership) => {
+          const isActive = membership.household.id === session.household.id;
+          return <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: isActive }}
+            key={membership.household.id}
+            onPress={() => { if (!isActive) void selectMembership(membership); }}
+            style={[styles.householdOption, isActive && styles.householdOptionActive]}
+          >
+            <View><Text style={[styles.householdOptionName, isActive && styles.householdOptionNameActive]}>{membership.household.name}</Text><Text style={[styles.householdOptionMeta, isActive && styles.householdOptionMetaActive]}>You as {membership.member.displayName}</Text></View>
+            <Text style={[styles.householdOptionOpen, isActive && styles.householdOptionOpenActive]}>{isActive ? 'Open' : 'Open →'}</Text>
+          </Pressable>;
+        })}
+      </View> : null}
       <Text style={styles.next}>A calmer week starts here.</Text>
       <Text style={styles.nextCopy}>Here’s a friendly, at-a-glance view of the work your household is sharing.</Text>
       <View style={styles.tabRow}>{tabs.map((tab) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}><Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text></Pressable>)}</View>
@@ -61,6 +77,16 @@ const styles = StyleSheet.create({
   inviteLabel: { color: colors.mint, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   inviteCode: { color: colors.paper, marginTop: 8, fontSize: 27, fontWeight: '900', letterSpacing: 1.2 },
   inviteCopy: { color: '#DCE6E2', marginTop: 10, fontSize: 13, lineHeight: 19 },
+  householdList: { marginTop: spacing.lg, gap: spacing.xs },
+  householdListLabel: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  householdOption: { borderWidth: 1, borderColor: '#DCE6E2', borderRadius: 16, backgroundColor: colors.paper, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  householdOptionActive: { backgroundColor: colors.mintPale, borderColor: colors.mint },
+  householdOptionName: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  householdOptionNameActive: { color: colors.ink },
+  householdOptionMeta: { color: colors.muted, marginTop: 3, fontSize: 12, fontWeight: '600' },
+  householdOptionMetaActive: { color: colors.ink },
+  householdOptionOpen: { color: colors.coralDark, fontSize: 12, fontWeight: '900' },
+  householdOptionOpenActive: { color: colors.ink },
   next: { color: colors.ink, marginTop: 34, fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   nextCopy: { color: colors.muted, marginTop: 8, fontSize: 15, lineHeight: 22 },
   tabRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.lg },
