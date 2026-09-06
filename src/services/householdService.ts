@@ -42,11 +42,19 @@ async function membershipsForSavedSession() {
   return [];
 }
 
-async function persistAfterDeparture(departedHouseholdId: string): Promise<HouseholdMembership | null> {
+async function persistAfterDeparture(
+  departedHouseholdId: string,
+  knownMemberships: HouseholdMembership[],
+): Promise<HouseholdMembership | null> {
   const saved = await services.session.load();
   if (!saved) return null;
-  const memberships = (await services.households.listMemberships())
-    .filter((membership) => membership.household.id !== departedHouseholdId);
+  let memberships: HouseholdMembership[];
+  try {
+    memberships = await services.households.listMemberships();
+  } catch {
+    memberships = knownMemberships;
+  }
+  memberships = memberships.filter((membership) => membership.household.id !== departedHouseholdId);
   const next = memberships[0];
   if (!next) {
     await services.session.clear();
@@ -126,18 +134,18 @@ export const householdService = {
 
   clearSession: () => services.session.clear(),
 
-  async leaveHousehold(householdId: string, memberId: string) {
+  async leaveHousehold(householdId: string, memberId: string, knownMemberships: HouseholdMembership[] = []) {
     await services.households.leave(householdId, memberId);
-    return persistAfterDeparture(householdId);
+    return persistAfterDeparture(householdId, knownMemberships);
   },
 
-  async deleteHousehold(householdId: string, memberId: string) {
+  async deleteHousehold(householdId: string, memberId: string, knownMemberships: HouseholdMembership[] = []) {
     await services.households.delete(householdId, memberId);
-    return persistAfterDeparture(householdId);
+    return persistAfterDeparture(householdId, knownMemberships);
   },
 
-  async transferOwnershipAndLeave(householdId: string, memberId: string, newOwnerMemberId: string) {
+  async transferOwnershipAndLeave(householdId: string, memberId: string, newOwnerMemberId: string, knownMemberships: HouseholdMembership[] = []) {
     await services.households.transferOwnershipAndLeave(householdId, memberId, newOwnerMemberId);
-    return persistAfterDeparture(householdId);
+    return persistAfterDeparture(householdId, knownMemberships);
   },
 };

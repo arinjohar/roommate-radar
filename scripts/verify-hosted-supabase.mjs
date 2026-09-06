@@ -216,7 +216,53 @@ async function main() {
     'A departing owner remained assigned to an active chore.',
   );
 
-  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore workflows, saved totals, seeded demo, pulse, reset, and ownership transfer.');
+  await rpc(guest.access_token, 'delete_household', { p_household_id: householdId });
+  const membershipsAfterDelete = await rpc(guest.access_token, 'list_my_household_memberships', {});
+  assert(
+    !membershipsAfterDelete.some((membership) => membership.household_id === householdId),
+    'A deleted household is still present in the owner membership list.',
+  );
+
+  const populated = await rpc(owner.access_token, 'create_household', {
+    p_name: `Deletion House ${runId}`,
+    p_display_name: 'Delete owner',
+    p_avatar_color: '#F36F56',
+  });
+  const populatedGuest = await rpc(guest.access_token, 'join_household', {
+    p_invite_code: populated.household.invite_code,
+    p_display_name: 'Delete guest',
+    p_avatar_color: '#9ED9C5',
+  });
+  const populatedInput = {
+    ...input,
+    title: `Assigned before deletion ${runId}`,
+    assigneeIds: [populated.member.id, populatedGuest.member.id],
+  };
+  const populatedRequest = await rpc(owner.access_token, 'request_chore_change', {
+    p_household_id: populated.household.id,
+    p_action: 'create',
+    p_payload: populatedInput,
+  });
+  await rpc(guest.access_token, 'vote_chore_change', {
+    p_household_id: populated.household.id,
+    p_request_id: populatedRequest.pending.id,
+    p_vote: 'approved',
+  });
+  await rpc(guest.access_token, 'request_chore_change', {
+    p_household_id: populated.household.id,
+    p_action: 'create',
+    p_payload: { ...populatedInput, title: `Pending during deletion ${runId}` },
+  });
+  await rpc(owner.access_token, 'delete_household', { p_household_id: populated.household.id });
+  for (const user of [owner, guest]) {
+    const remaining = await rpc(user.access_token, 'list_my_household_memberships', {});
+    assert(
+      !remaining.some((membership) => membership.household_id === populated.household.id),
+      'A populated deleted household is still present in a member list.',
+    );
+  }
+
+  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore workflows, saved totals, seeded demo, pulse, reset, ownership transfer, and household deletion.');
 }
 
 function mondayUtc() {

@@ -65,21 +65,27 @@ export function HouseholdSessionProvider({ children }: PropsWithChildren) {
     },
     async leaveHousehold() {
       if (!session) return;
-      const next = await householdService.leaveHousehold(session.household.id, session.member.id);
+      const departedHouseholdId = session.household.id;
+      const next = await householdService.leaveHousehold(departedHouseholdId, session.member.id, memberships);
       setSession(next);
-      setMemberships(next ? await householdService.listMemberships() : []);
+      setMemberships(next ? includeMembership(memberships.filter((membership) => membership.household.id !== departedHouseholdId), next) : []);
+      void householdService.listMemberships().then(setMemberships).catch(() => undefined);
     },
     async deleteHousehold() {
       if (!session) return;
-      const next = await householdService.deleteHousehold(session.household.id, session.member.id);
+      const departedHouseholdId = session.household.id;
+      const next = await householdService.deleteHousehold(departedHouseholdId, session.member.id, memberships);
       setSession(next);
-      setMemberships(next ? await householdService.listMemberships() : []);
+      setMemberships(next ? includeMembership(memberships.filter((membership) => membership.household.id !== departedHouseholdId), next) : []);
+      void householdService.listMemberships().then(setMemberships).catch(() => undefined);
     },
     async transferOwnershipAndLeave(newOwnerMemberId: string) {
       if (!session) return;
-      const next = await householdService.transferOwnershipAndLeave(session.household.id, session.member.id, newOwnerMemberId);
+      const departedHouseholdId = session.household.id;
+      const next = await householdService.transferOwnershipAndLeave(departedHouseholdId, session.member.id, newOwnerMemberId, memberships);
       setSession(next);
-      setMemberships(next ? await householdService.listMemberships() : []);
+      setMemberships(next ? includeMembership(memberships.filter((membership) => membership.household.id !== departedHouseholdId), next) : []);
+      void householdService.listMemberships().then(setMemberships).catch(() => undefined);
     },
   }), [memberships, session]);
 
