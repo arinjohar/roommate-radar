@@ -46,6 +46,24 @@ export function FairnessPanel({ householdId, memberId, mode }: { householdId: st
   const week = currentWeek();
 
   useEffect(() => {
+    setRatings({ cleanliness: 3, noise: 3, communication: 3 });
+    setSubmitted(false);
+  }, [householdId, memberId, week.weekStart]);
+
+  useEffect(() => {
+    const existing = responses.find(
+      (response) => response.memberId === memberId && response.weekStart === week.weekStart,
+    );
+    if (!existing) return;
+    setRatings({
+      cleanliness: existing.cleanliness,
+      noise: existing.noise,
+      communication: existing.communication,
+    });
+    setSubmitted(true);
+  }, [memberId, responses, week.weekStart]);
+
+  useEffect(() => {
     let active = true;
     setIsLoading(true);
     const refresh = () => Promise.all([

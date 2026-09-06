@@ -8,6 +8,7 @@ import type {
 import type { HouseholdMembership, RoommateRadarServices } from './contracts';
 import type { ChoreBoardSnapshot, ChoreService } from './contracts';
 import { parseSchedule } from './choreSchedule';
+import { validateDisplayName, validateHouseholdName } from './householdValidation';
 
 interface SupabaseOptions {
   url: string;
@@ -98,17 +99,20 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
   return {
     households: {
       async create(input) {
+        const householdName = validateHouseholdName(input.householdName);
+        const displayName = validateDisplayName(input.displayName);
         const value = await rpc<{ household: DbHousehold; member: DbMember }>('create_household', {
-          p_name: input.householdName,
-          p_display_name: input.displayName,
+          p_name: householdName,
+          p_display_name: displayName,
           p_avatar_color: input.avatarColor,
         });
         return mapMembership(value);
       },
       async join(input) {
+        const displayName = validateDisplayName(input.displayName);
         const value = await rpc<{ household: DbHousehold; member: DbMember }>('join_household', {
           p_invite_code: input.inviteCode,
-          p_display_name: input.displayName,
+          p_display_name: displayName,
           p_avatar_color: input.avatarColor,
         });
         return mapMembership(value);
