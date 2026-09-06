@@ -14,7 +14,7 @@ test('hosted board uses authenticated RPCs, structured schedules, and database p
   };
   try {
     const services = createSupabaseServices({ url: 'https://example.supabase.co', anonKey: 'public-key', getAccessToken: async () => 'user-token', session: { load: async () => null, save: async () => {}, clear: async () => {} } });
-    await services.choreBoard.requestChore({ householdId: 'home', requestedById: 'member', title: 'Tidy', points: 2, assigneeIds: ['member'], recurrence: 'every 2 weeks', dueAt: '2026-09-09T18:00:00Z', dueInDays: 4, starterTitle: null });
+    await services.chores.requestChore({ householdId: 'home', requestedById: 'member', title: 'Tidy', points: 2, assigneeIds: ['member'], recurrence: 'every 2 weeks', dueAt: '2026-09-09T18:00:00Z', dueInDays: 4, starterTitle: null });
     const body = JSON.parse(String(calls[0].init.body));
     assert.equal(body.p_action, 'create');
     assert.equal(body.p_payload.repeatEvery, 2);

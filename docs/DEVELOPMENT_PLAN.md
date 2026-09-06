@@ -73,10 +73,11 @@ pull request.
 
 ### Shared chore workflows (September 6 update)
 
-The configured service now exposes `choreBoard` as well as the existing `chores`
-read/completion API. Both interfaces share persistence in local mode; hosted mode
-uses authenticated Supabase RPCs. Screens must obtain the board through
-`src/services/index.ts`, not instantiate a separate local store.
+The configured `services.chores` API exposes board workflows alongside the
+existing reads and completions. Local mode uses the unified data store and board
+settings from the service cleanup; hosted mode uses authenticated Supabase RPCs.
+Screens obtain this service through `src/services/index.ts`. The former standalone
+`choreService.ts` remains removed.
 
 - New chore writes accept 1–10 effort points, multiple household member IDs,
   an optional ISO due date, and structured `repeatEvery`/`repeatUnit` values.
@@ -172,7 +173,8 @@ Branch: `feature/chore-board`
 - Build the weekly chore list, chore card, completion interaction, and empty state.
 - Seed 8 chores with point values from 1–6.
 - Use the shared `Chore` and `Completion` types.
-- Keep persistence behind `choreService` with an in-memory/mock implementation first.
+- Use the shared `services.chores` contract so the board, balance view, and selected
+  data adapter all read the same chore and completion state.
 
 ### Developer 3 — balance and pulse
 
@@ -321,7 +323,7 @@ Checkpoint: all six steps in the product loop pass on both platforms.
 Run this on iOS and Android before the final build:
 
 1. Fresh install opens to the Roommate Radar landing screen without clipping.
-2. Create “Maple House” or join it with the demo code.
+2. Create a household or join the seeded Shared Home household with its invite code.
 3. Chores show title, assignee, due state, and effort points.
 4. Complete “Clean bathroom” once; a second rapid tap does not duplicate it.
 5. Relaunch; the completion remains.
@@ -331,7 +333,7 @@ Run this on iOS and Android before the final build:
 9. Turn off networking; the app shows cached/seeded data or a recoverable error.
 10. Open Members and confirm the current household roster appears, with the active
     user labeled “(You)”.
-11. Reset the demo and repeat the 90-second pitch flow.
+11. Return to the welcome screen and repeat the 90-second pitch flow.
 
 ## 10. Risk register and cuts
 

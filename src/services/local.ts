@@ -1,24 +1,113 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { HouseholdSession, PulseResponse } from '../types/domain';
-import type { RoommateRadarServices } from './contracts';
+import type { Chore, Completion, HouseholdSession, PulseResponse } from '../types/domain';
+import type {
+  Approval,
+  ChoreBoardSnapshot,
+  ChoreRequest,
+  ChoreStarter,
+  PendingChore,
+  PendingTrustChange,
+  RoommateRadarServices,
+  TrustLevel,
+} from './contracts';
+import { nextDueDate, parseSchedule, type ChoreScope } from './choreSchedule';
 import { createDemoData, type DemoData } from './demoData';
-import { createChoreService } from './choreService';
 
 const DATA_KEY = '@roommate-radar/demo-data/v1';
 const SESSION_KEY = '@roommate-radar/session/v1';
+const CHORE_BOARD_KEY = '@roommate-radar/chore-board/v3';
 
 type Storage = Pick<typeof AsyncStorage, 'getItem' | 'setItem' | 'removeItem'>;
+type ServiceOptions = { now?: () => Date };
+type ChoreBoardSettings = Omit<ChoreBoardSnapshot, 'chores' | 'completions'> & { seriesTemplates?: Record<string, Chore> };
+type ChoreBoardState = { households: Record<string, ChoreBoardSettings> };
+
+const trustLevelStrictness: Record<TrustLevel, number> = {
+  open: 0,
+  'points-and-new': 1,
+  'everything-except-date': 2,
+};
 
 function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-export function createLocalServices(storage: Storage = AsyncStorage): RoommateRadarServices {
+function defaultBoardSettings(): ChoreBoardSettings {
+  return {
+    choreStarters: [],
+    trustLevel: 'everything-except-date',
+    completedRetentionDays: 7,
+    pendingChores: [],
+    pendingTrustChanges: [],
+  };
+}
+
+function recurrenceInterval(recurrence: string) {
+  const schedule = parseSchedule(recurrence);
+  return schedule.repeatEvery && schedule.repeatUnit ? { count: schedule.repeatEvery, unit: schedule.repeatUnit } : null;
+}
+
+function materializeRecurringChores(data: DemoData, householdId: string, settings: ChoreBoardSettings, now: Date) {
+  const completedIds = new Set(data.completions.map((completion) => completion.choreId));
+  const seriesIds = [...new Set(data.chores.filter((chore) => chore.householdId === householdId).map((chore) => chore.seriesId ?? chore.id))];
+  for (const seriesId of seriesIds) {
+    const series = data.chores.filter((chore) => (chore.seriesId ?? chore.id) === seriesId);
+    const latest = series[series.length - 1];
+    const template = settings.seriesTemplates?.[seriesId] ?? latest;
+    const interval = template ? recurrenceInterval(template.recurrence) : null;
+    if (!latest || !interval || template.archivedAt || (!latest.archivedAt && !completedIds.has(latest.id)) || !latest.dueAt) continue;
+    const nextDue = new Date(nextDueDate(latest.scheduledAt ?? latest.dueAt, interval.count, interval.unit));
+    if (nextDue > now) continue;
+    data.chores.push({ ...template, archivedAt: null, version: 1, id: `recurrence-${seriesId}-${nextDue.getTime()}`, dueAt: nextDue.toISOString(), scheduledAt: nextDue.toISOString(), seriesId, isPreApproved: true });
+  }
+}
+
+function validateChore(input: ChoreRequest, today: Date, originalDueAt?: string) {
+  const normalizedTitle = input.title.trim();
+  const dueDay = input.dueAt.slice(0, 10);
+  if (input.dueAt && Number.isNaN(Date.parse(input.dueAt))) throw new Error('Invalid date.');
+  const parsedDueDay = new Date(`${dueDay}T00:00:00.000Z`);
+  const todayUtc = new Date(today);
+  todayUtc.setUTCHours(0, 0, 0, 0);
+  if (dueDay && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDay) || Number.isNaN(parsedDueDay.getTime()) || parsedDueDay.toISOString().slice(0, 10) !== dueDay || (parsedDueDay < todayUtc && dueDay !== originalDueAt?.slice(0, 10)))) throw new Error('Invalid date.');
+  if (!normalizedTitle || normalizedTitle.length > 120) throw new Error('Give this chore a name between 1 and 120 characters.');
+  const schedule = parseSchedule(input.recurrence);
+  if (schedule.repeatEvery && !dueDay) throw new Error('Choose a due date for a repeating chore.');
+  if (!Number.isInteger(input.points) || input.points < 1 || input.points > 10) throw new Error('Choose between 1 and 10 effort points.');
+  if (!Number.isInteger(input.dueInDays) && input.dueInDays !== null) throw new Error('Invalid due interval.');
+  return normalizedTitle;
+}
+
+function sameIds(left: string[], right: string[]) {
+  const sortedRight = [...right].sort();
+  return left.length === right.length
+    && [...left].sort().every((id, index) => id === sortedRight[index]);
+}
+
+function approvalsFor(memberIds: string[], requesterId: string): Record<string, Approval> {
+  if (!memberIds.includes(requesterId)) {
+    throw new Error('Only household members can request chore changes.');
+  }
+  return Object.fromEntries(
+    memberIds.map((id) => [id, id === requesterId ? 'approved' : 'pending']),
+  );
+}
+
+export function createLocalServices(
+  storage: Storage = AsyncStorage,
+  options: ServiceOptions = {},
+): RoommateRadarServices {
+  const now = options.now ?? (() => new Date());
+  let mutationQueue: Promise<unknown> = Promise.resolve();
   async function readData(): Promise<DemoData> {
     const serialized = await storage.getItem(DATA_KEY);
     if (serialized) {
@@ -41,14 +130,131 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
     await storage.setItem(DATA_KEY, JSON.stringify(data));
   }
 
-  const choreBoard = createChoreService(storage, { initialData: async (householdId) => {
-    const data = await readData();
-    const chores = data.chores.filter((item) => item.householdId === householdId);
-    return { chores, completions: data.completions.filter((item) => chores.some((chore) => chore.id === item.choreId)), memberIds: data.members.filter((item) => item.householdId === householdId).map((item) => item.id) };
-  } });
+  async function readBoardState(): Promise<ChoreBoardState> {
+    const serialized = await storage.getItem(CHORE_BOARD_KEY);
+    return serialized ? JSON.parse(serialized) as ChoreBoardState : { households: {} };
+  }
+
+  async function mutateBoard<T>(
+    householdId: string,
+    change: (
+      data: DemoData,
+      settings: ChoreBoardSettings,
+      memberIds: string[],
+    ) => T | Promise<T>,
+  ): Promise<T> {
+    const operation = mutationQueue.then(async () => {
+      const [data, boardState] = await Promise.all([readData(), readBoardState()]);
+      const settings = boardState.households[householdId] ?? defaultBoardSettings();
+      boardState.households[householdId] = settings;
+      const memberIds = data.members
+        .filter((member) => member.householdId === householdId)
+        .map((member) => member.id);
+      const result = await change(data, settings, memberIds);
+      await Promise.all([
+        writeData(data),
+        storage.setItem(CHORE_BOARD_KEY, JSON.stringify(boardState)),
+      ]);
+      return result;
+    });
+    mutationQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  function createApprovedChore(
+    data: DemoData,
+    settings: ChoreBoardSettings,
+    input: ChoreRequest,
+    title: string,
+  ): Chore {
+    const choreId = makeId();
+    const chore: Chore = {
+      id: choreId,
+      householdId: input.householdId,
+      title,
+      points: input.points,
+      assigneeIds: [...input.assigneeIds],
+      dueAt: input.dueAt,
+      dueIntervalDays: input.dueInDays,
+      recurrence: input.recurrence,
+      isPreApproved: true,
+      seriesId: choreId,
+      version: 1,
+      scheduledAt: input.dueAt,
+      ...parseSchedule(input.recurrence),
+    };
+    data.chores.push(chore);
+    const starter: ChoreStarter = {
+      title,
+      points: input.points,
+      assigneeIds: [...input.assigneeIds],
+      recurrence: input.recurrence,
+      dueInDays: input.dueInDays,
+    };
+    const index = settings.choreStarters.findIndex(
+      (item) => item.title.toLowerCase() === title.toLowerCase(),
+    );
+    if (index >= 0) settings.choreStarters[index] = starter;
+    else settings.choreStarters.push(starter);
+    return chore;
+  }
+
+  function addCompletion(
+    data: DemoData,
+    chore: Chore,
+    memberId: string,
+    requestKey: string,
+  ): Completion {
+    const existingId = data.completionRequestIds[requestKey];
+    const existing = data.completions.find((item) => item.choreId === chore.id || item.id === existingId);
+    if (existing) return existing;
+    if (chore.archivedAt) throw new Error('That chore was deleted.');
+    const completion: Completion = {
+      id: makeId(),
+      choreId: chore.id,
+      memberId,
+      pointsAwarded: chore.points,
+      completedAt: now().toISOString(),
+    };
+    data.completions.push(completion);
+    data.completionRequestIds[requestKey] = completion.id;
+    return completion;
+  }
+
+  function requestChange(data: DemoData, settings: ChoreBoardSettings, memberIds: string[], input: ChoreRequest & { choreId: string; scope: ChoreScope; expectedVersion: number }, action: 'edit' | 'archive') {
+    const chore = data.chores.find((item) => item.id === input.choreId && item.householdId === input.householdId);
+    if (!chore || chore.archivedAt) throw new Error('That chore is no longer active.');
+    if (data.completions.some((item) => item.choreId === chore.id)) throw new Error('Completed chores keep their history.');
+    if ((chore.version ?? 1) !== input.expectedVersion) throw new Error('This chore changed. Refresh before editing.');
+    if (settings.pendingChores.some((item) => item.choreId === chore.id)) throw new Error('A change for this chore is already pending.');
+    const approvals = approvalsFor(memberIds, input.requestedById);
+    if (input.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
+    const title = action === 'edit' ? validateChore(input, now(), chore.dueAt) : chore.title;
+    if (action === 'edit' && input.scope === 'occurrence' && JSON.stringify(parseSchedule(input.recurrence)) !== JSON.stringify(parseSchedule(chore.recurrence))) throw new Error('Choose This and future to change the repeat schedule.');
+    const pending: PendingChore = { ...input, title, action, id: `change-${now().getTime()}-${Math.random()}`, approvals };
+    const needsApproval = settings.trustLevel === 'everything-except-date' || (settings.trustLevel === 'points-and-new' && input.points !== chore.points);
+    if (needsApproval && !memberIds.every((id) => approvals[id] === 'approved')) settings.pendingChores.push(pending);
+    else applyChange(data, settings, pending);
+  }
+
+  function applyChange(data: DemoData, settings: ChoreBoardSettings, input: PendingChore) {
+    const chore = data.chores.find((item) => item.id === input.choreId && item.householdId === input.householdId);
+    if (!chore || chore.archivedAt || (chore.version ?? 1) !== input.expectedVersion || data.completions.some((item) => item.choreId === chore.id)) throw new Error('This chore changed. Reject this request and refresh.');
+    const seriesId = chore.seriesId ?? chore.id;
+    settings.seriesTemplates ??= {};
+    settings.seriesTemplates[seriesId] ??= clone(chore);
+    chore.scheduledAt ??= chore.dueAt;
+    if (input.action === 'archive') chore.archivedAt = now().toISOString();
+    else {
+      Object.assign(chore, { title: input.title, points: input.points, assigneeIds: [...input.assigneeIds], dueAt: input.dueAt, recurrence: input.recurrence, dueIntervalDays: input.dueInDays, ...parseSchedule(input.recurrence) });
+      const starter = { title: input.title, points: input.points, assigneeIds: [...input.assigneeIds], recurrence: input.recurrence, dueInDays: input.dueInDays };
+      settings.choreStarters = [...settings.choreStarters.filter((item) => item.title.toLowerCase() !== input.title.toLowerCase()), starter];
+    }
+    chore.version = (chore.version ?? 1) + 1;
+    if (input.scope === 'future') { chore.scheduledAt = chore.dueAt; settings.seriesTemplates[seriesId] = clone(chore); }
+  }
 
   return {
-    choreBoard,
     households: {
       async create(input) {
         const data = await readData();
@@ -93,25 +299,223 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
       },
     },
     chores: {
+      async requestEdit(input) {
+        await mutateBoard(input.householdId, (data, settings, memberIds) => requestChange(data, settings, memberIds, input, 'edit'));
+      },
+      async requestArchive(input) {
+        await mutateBoard(input.householdId, (data, settings, memberIds) => {
+          const chore = data.chores.find((item) => item.id === input.choreId && item.householdId === input.householdId);
+          if (!chore) throw new Error('Chore not found.');
+          requestChange(data, settings, memberIds, { ...chore, dueInDays: chore.dueIntervalDays ?? null, starterTitle: null, ...input }, 'archive');
+        });
+      },
       async listMemberPoints(householdId) {
-        const board = await choreBoard.getBoard(householdId);
-        return (await readData()).members.filter((member) => member.householdId === householdId).map((member) => ({ memberId: member.id, totalPoints: board.completions.filter((item) => item.memberId === member.id).reduce((sum, item) => sum + item.pointsAwarded, 0) }));
+        const data = await readData();
+        return data.members.filter((member) => member.householdId === householdId).map((member) => ({ memberId: member.id, totalPoints: data.completions.filter((item) => item.memberId === member.id).reduce((sum, item) => sum + item.pointsAwarded, 0) }));
       },
       async list(householdId) {
-        return (await choreBoard.getBoard(householdId)).chores
-          .filter((item) => !item.archivedAt)
+        return (await readData()).chores
+          .filter((item) => item.householdId === householdId && !item.archivedAt)
           .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
       },
       async listCompletions(householdId, from, to) {
-        return (await choreBoard.getBoard(householdId)).completions.filter((item) => item.completedAt >= from && item.completedAt < to);
+        const data = await readData();
+        const choreIds = new Set(
+          data.chores.filter((item) => item.householdId === householdId).map((item) => item.id),
+        );
+        return data.completions.filter(
+          (item) => choreIds.has(item.choreId) && item.completedAt >= from && item.completedAt < to,
+        );
       },
       async complete(choreId, idempotencyKey) {
         const session = await loadSession(storage);
-        if (!session) {
-          throw new Error('Join this household before completing a chore.');
-        }
+        if (!session) throw new Error('Join this household before completing a chore.');
         if (!idempotencyKey.trim()) throw new Error('Idempotency key required.');
-        return choreBoard.completeChore({ householdId: session.householdId, choreId, memberId: session.memberId });
+        return mutateBoard(session.householdId, (data, _settings, memberIds) => {
+          const chore = data.chores.find((item) => item.id === choreId && item.householdId === session.householdId);
+          if (!chore || !memberIds.includes(session.memberId)) throw new Error('Chore not found.');
+          return addCompletion(data, chore, session.memberId, `${session.memberId}:${idempotencyKey}`);
+        });
+      },
+      getBoard(householdId) {
+        return mutateBoard(householdId, (data, settings) => {
+          materializeRecurringChores(data, householdId, settings, now());
+          const choreIds = new Set(
+            data.chores
+              .filter((chore) => chore.householdId === householdId)
+              .map((chore) => chore.id),
+          );
+          return {
+            ...settings,
+            chores: data.chores
+              .filter((chore) => chore.householdId === householdId)
+              .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
+            completions: data.completions.filter((completion) => choreIds.has(completion.choreId)),
+          };
+        });
+      },
+      requestChore(input) {
+        return mutateBoard(input.householdId, (data, settings, memberIds) => {
+          approvalsFor(memberIds, input.requestedById);
+          if (input.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
+          const title = validateChore(input, now());
+          const saved = input.starterTitle
+            ? settings.choreStarters.find(
+              (item) => item.title.toLowerCase() === input.starterTitle?.toLowerCase(),
+            )
+            : undefined;
+          const usesSavedSettings = Boolean(saved)
+            && saved?.title.toLowerCase() === title.toLowerCase()
+            && saved.points === input.points
+            && sameIds(saved.assigneeIds, input.assigneeIds)
+            && saved.recurrence === input.recurrence
+            && saved.dueInDays === input.dueInDays;
+          const requiresApproval = settings.trustLevel === 'open'
+            ? false
+            : settings.trustLevel === 'points-and-new'
+              ? !saved || saved.title.toLowerCase() !== title.toLowerCase() || saved.points !== input.points
+              : !usesSavedSettings;
+          if (!requiresApproval) {
+            return {
+              status: 'created' as const,
+              chore: createApprovedChore(data, settings, input, title),
+            };
+          }
+          const pending: PendingChore = {
+            id: `pending-${makeId()}`,
+            householdId: input.householdId,
+            title,
+            points: input.points,
+            assigneeIds: [...input.assigneeIds],
+            dueAt: input.dueAt,
+            dueInDays: input.dueInDays,
+            recurrence: input.recurrence,
+            requestedById: input.requestedById,
+            approvals: approvalsFor(memberIds, input.requestedById),
+          };
+          if (memberIds.every((id) => pending.approvals[id] === 'approved')) {
+            return {
+              status: 'created' as const,
+              chore: createApprovedChore(data, settings, input, title),
+            };
+          }
+          settings.pendingChores.push(pending);
+          return { status: 'pending' as const, pending };
+        });
+      },
+      voteOnChore({ householdId, pendingId, memberId, vote }) {
+        return mutateBoard(householdId, (data, settings, memberIds) => {
+          const index = settings.pendingChores.findIndex((item) => item.id === pendingId);
+          if (index < 0) throw new Error('That request is no longer pending.');
+          if (!memberIds.includes(memberId)) {
+            throw new Error('Only household members can vote on chore changes.');
+          }
+          const pending = settings.pendingChores[index];
+          if (vote === 'rejected') {
+            settings.pendingChores.splice(index, 1);
+            return null;
+          }
+          pending.approvals[memberId] = 'approved';
+          if (!memberIds.every((id) => pending.approvals[id] === 'approved')) return null;
+          settings.pendingChores.splice(index, 1);
+          if (pending.action && pending.action !== 'create') {
+            applyChange(data, settings, pending);
+            return null;
+          }
+          return createApprovedChore(
+            data,
+            settings,
+            { ...pending, starterTitle: null },
+            pending.title,
+          );
+        });
+      },
+      requestTrustLevelChange({ householdId, memberId, nextTrustLevel }) {
+        return mutateBoard(householdId, (_data, settings, memberIds) => {
+          approvalsFor(memberIds, memberId);
+          if (nextTrustLevel === settings.trustLevel) return;
+          if (settings.pendingTrustChanges.length > 0) {
+            throw new Error('A trust level change is already pending.');
+          }
+          if (trustLevelStrictness[nextTrustLevel] > trustLevelStrictness[settings.trustLevel]) {
+            settings.trustLevel = nextTrustLevel;
+            return;
+          }
+          const pending: PendingTrustChange = {
+            id: `pending-trust-${makeId()}`,
+            householdId,
+            nextTrustLevel,
+            requestedById: memberId,
+            approvals: approvalsFor(memberIds, memberId),
+          };
+          if (memberIds.every((id) => pending.approvals[id] === 'approved')) {
+            settings.trustLevel = nextTrustLevel;
+            return;
+          }
+          settings.pendingTrustChanges.push(pending);
+        });
+      },
+      voteOnTrustLevelChange({ householdId, pendingId, memberId, vote }) {
+        return mutateBoard(householdId, (_data, settings, memberIds) => {
+          const index = settings.pendingTrustChanges.findIndex((item) => item.id === pendingId);
+          if (index < 0) throw new Error('That trust level request is no longer pending.');
+          if (!memberIds.includes(memberId)) {
+            throw new Error('Only household members can vote on trust changes.');
+          }
+          const pending = settings.pendingTrustChanges[index];
+          if (vote === 'rejected') {
+            settings.pendingTrustChanges.splice(index, 1);
+            return;
+          }
+          pending.approvals[memberId] = 'approved';
+          if (memberIds.every((id) => pending.approvals[id] === 'approved')) {
+            settings.trustLevel = pending.nextTrustLevel;
+            settings.pendingTrustChanges.splice(index, 1);
+          }
+        });
+      },
+      setCompletedRetentionDays(householdId, days) {
+        return mutateBoard(householdId, (_data, settings) => {
+          if (![7, 14, 30].includes(days)) {
+            throw new Error('Choose a supported history window.');
+          }
+          settings.completedRetentionDays = days;
+        });
+      },
+      removeChoreStarter(householdId, title) {
+        return mutateBoard(householdId, (_data, settings) => {
+          settings.choreStarters = settings.choreStarters.filter(
+            (item) => item.title !== title,
+          );
+        });
+      },
+      updateChorePoints({ householdId, choreId, points }) {
+        return mutateBoard(householdId, (data) => {
+          if (!Number.isInteger(points) || points < 1 || points > 10) {
+            throw new Error('Choose between 1 and 10 effort points.');
+          }
+          const existing = data.chores.find(
+            (chore) => chore.householdId === householdId && chore.id === choreId,
+          );
+          if (!existing) {
+            throw new Error('That chore is no longer available. Refresh and try again.');
+          }
+          throw new Error('Published chores keep their effort points.');
+        });
+      },
+      completeChore({ householdId, choreId, memberId }) {
+        return mutateBoard(householdId, (data, _settings, memberIds) => {
+          const chore = data.chores.find(
+            (candidate) => candidate.householdId === householdId && candidate.id === choreId,
+          );
+          if (!chore) {
+            throw new Error('That chore is no longer available. Refresh and try again.');
+          }
+          if (!memberIds.includes(memberId)) {
+            throw new Error('Join this household before completing a chore.');
+          }
+          return addCompletion(data, chore, memberId, `${memberId}:${choreId}`);
+        });
       },
     },
     pulse: {
@@ -157,8 +561,10 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
     demo: {
       async reset() {
         await writeData(createDemoData());
-        await storage.removeItem('@roommate-radar/chore-board/v2');
-        await storage.removeItem(SESSION_KEY);
+        await Promise.all([
+          storage.removeItem(SESSION_KEY),
+          storage.removeItem(CHORE_BOARD_KEY),
+        ]);
       },
     },
   };

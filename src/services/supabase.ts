@@ -6,7 +6,7 @@ import type {
   PulseResponse,
 } from '../types/domain';
 import type { HouseholdMembership, RoommateRadarServices } from './contracts';
-import type { ChoreBoardSnapshot, ChoreService } from './choreService';
+import type { ChoreBoardSnapshot, ChoreService } from './contracts';
 import { parseSchedule } from './choreSchedule';
 
 interface SupabaseOptions {
@@ -78,10 +78,8 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
 
   const change = <T>(householdId: string, action: string, payload: object) => rpc<T>('request_chore_change', { p_household_id: householdId, p_action: action, p_payload: payload });
   const vote = (householdId: string, pendingId: string, choice: string) => rpc<Chore | null>('vote_chore_change', { p_household_id: householdId, p_request_id: pendingId, p_vote: choice });
-  const choreBoard: ChoreService = {
+  const choreBoard: Omit<ChoreService, 'list' | 'listCompletions' | 'complete' | 'listMemberPoints'> = {
     getBoard: (householdId) => rpc<ChoreBoardSnapshot>('get_chore_board', { p_household_id: householdId }),
-    // The hosted roster comes from authenticated membership, never a client-supplied list.
-    async setHouseholdMembers() {},
     requestChore: (input) => change(input.householdId, 'create', { ...input, ...parseSchedule(input.recurrence) }),
     async requestEdit(input) { await change(input.householdId, 'edit', { ...input, ...parseSchedule(input.recurrence) }); },
     async requestArchive(input) { await change(input.householdId, 'archive', input); },
@@ -97,7 +95,6 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
   };
 
   return {
-    choreBoard,
     households: {
       async create(input) {
         const value = await rpc<{ household: DbHousehold; member: DbMember }>('create_household', {
@@ -129,6 +126,7 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
       },
     },
     chores: {
+      ...choreBoard,
       async listMemberPoints(householdId) {
         const rows = await request<{ member_id: string; total_points: number }[]>(`member_point_totals?household_id=eq.${encodeURIComponent(householdId)}&select=member_id,total_points`);
         return rows.map((row) => ({ memberId: row.member_id, totalPoints: Number(row.total_points) }));
