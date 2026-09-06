@@ -115,6 +115,25 @@ test('household creation records one creator and owners must transfer before lea
   const services = createLocalServices(storage);
   const creator = await services.households.create({ householdName: 'Cedar House', displayName: 'Pat', avatarColor: '#F36F56' });
   const roommate = await services.households.join({ inviteCode: creator.household.inviteCode, displayName: 'Lee', avatarColor: '#9ED9C5' });
+  const assigned = await services.chores.requestChore({
+    householdId: creator.household.id,
+    requestedById: creator.member.id,
+    title: 'Owner chore',
+    points: 3,
+    assigneeIds: [creator.member.id, roommate.member.id],
+    recurrence: 'weekly',
+    dueAt: '2026-09-07T18:00:00.000Z',
+    dueInDays: null,
+    starterTitle: null,
+  });
+  assert.equal(assigned.status, 'pending');
+  if (assigned.status !== 'pending') return;
+  await services.chores.voteOnChore({
+    householdId: creator.household.id,
+    pendingId: assigned.pending.id,
+    memberId: roommate.member.id,
+    vote: 'approved',
+  });
 
   assert.equal(creator.household.creatorMemberId, creator.member.id);
   await assert.rejects(
@@ -129,6 +148,7 @@ test('household creation records one creator and owners must transfer before lea
   await services.households.transferOwnershipAndLeave(creator.household.id, creator.member.id, roommate.member.id);
   assert.equal((await services.households.get(creator.household.id))?.creatorMemberId, roommate.member.id);
   assert.deepEqual((await services.households.listMembers(creator.household.id)).map((member) => member.id), [roommate.member.id]);
+  assert.deepEqual((await services.chores.list(creator.household.id))[0].assigneeIds, [roommate.member.id]);
 });
 
 test('only the creator can delete a household', async () => {

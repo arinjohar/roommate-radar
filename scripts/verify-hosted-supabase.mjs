@@ -193,7 +193,30 @@ async function main() {
   assert(ownCompletionsAfterReset.length === 0, 'reset_my_demo_data did not remove the active user completion.');
   assert(ownPulsesAfterReset.length === 0, 'reset_my_demo_data did not remove the active user pulse.');
 
-  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore creation/edit/archive and approvals, saved member totals, seeded demo, completion idempotency, pulse upsert, and reset.');
+  await rpc(owner.access_token, 'transfer_household_ownership_and_leave', {
+    p_household_id: householdId,
+    p_new_owner_member_id: joined.member.id,
+  });
+  const formerOwnerMemberships = await rpc(owner.access_token, 'list_my_household_memberships', {});
+  assert(
+    !formerOwnerMemberships.some((membership) => membership.household_id === householdId),
+    'The former owner still has a membership after transferring ownership and leaving.',
+  );
+  const transferredMemberships = await rpc(guest.access_token, 'list_my_household_memberships', {});
+  assert(
+    transferredMemberships.some((membership) => (
+      membership.household_id === householdId
+      && membership.creator_member_id === joined.member.id
+    )),
+    'The selected roommate did not become the household owner.',
+  );
+  const transferredBoard = await board(guest.access_token);
+  assert(
+    transferredBoard.chores.every((item) => !item.assigneeIds.includes(created.member.id)),
+    'A departing owner remained assigned to an active chore.',
+  );
+
+  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore workflows, saved totals, seeded demo, pulse, reset, and ownership transfer.');
 }
 
 function mondayUtc() {

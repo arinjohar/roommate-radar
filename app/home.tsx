@@ -52,7 +52,10 @@ export default function HomeScreen() {
       setExitDialog(null);
       router.replace('/');
     } catch (error) {
-      setProfileError(error instanceof Error ? error.message : 'Something went wrong. Try again.');
+      const message = error instanceof Error ? error.message : '';
+      setProfileError(message.startsWith('Supabase request failed')
+        ? 'We couldn’t finish that household change. Please try again.'
+        : message || 'Something went wrong. Try again.');
     } finally {
       setIsProcessing(false);
     }
