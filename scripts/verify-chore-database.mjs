@@ -8,7 +8,7 @@ const db = new PGlite();
 await db.exec(`create role authenticated; create schema auth; create table auth.users(id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;`);
-for (const name of ['202609050001_initial_schema.sql','202609050002_fix_hosted_invite_codes.sql','202609060001_shared_chore_workflows.sql']) {
+for (const name of ['202609050001_initial_schema.sql','202609050002_fix_hosted_invite_codes.sql','202609060001_shared_chore_workflows.sql','202609060007_undo_chore_completion.sql']) {
   const sql = await readFile(new URL(`../supabase/migrations/${name}`, import.meta.url), 'utf8');
   await db.exec(sql.replace('create extension if not exists pgcrypto;', ''));
 }
@@ -57,9 +57,18 @@ assert.equal(Number(totals.find((m) => m.member_id===created.member.id).total_po
 await db.exec('reset role');
 await db.query(`update public.chores set due_at=now()-interval '8 days',scheduled_at=now()-interval '8 days' where id=$1`,[c.id]);
 await as(owner);
-const next = (await board()).chores.find((item) => item.id!==c.id);
+let next = (await board()).chores.find((item) => item.id!==c.id);
 assert.equal(next.title,'Clean kitchen'); assert.equal(next.points,3);
 assert.equal((await board()).chores.length,2);
+await assert.rejects(() => rpc('undo_chore_completion',[c.id]), /Only the roommate who completed/);
+await as(guest);
+await rpc('undo_chore_completion',[c.id]);
+assert.equal((await board()).chores.length,1);
+assert.equal((await board()).completions.length,0);
+totals = (await db.query('select * from public.member_point_totals')).rows;
+assert.equal(Number(totals.find((m) => m.member_id===joined.member.id).total_points),0);
+await rpc('complete_chore',[c.id,'after-undo']);
+await as(owner); next = (await board()).chores.find((item) => item.id!==c.id);
 const deletion = await rpc('request_chore_change',[hid,'archive',{ choreId:next.id,scope:'future',expectedVersion:1 }]);
 await as(guest); await rpc('vote_chore_change',[hid,deletion.pending.id,'approved']);
 assert.ok((await board()).chores.find((item) => item.id===next.id).archivedAt);
@@ -78,5 +87,5 @@ const direct = await rpc('request_chore_change',[hid,'create',{...input,title:'O
 assert.equal(direct.status,'created');
 await rpc('request_chore_change',[hid,'archive',{choreId:direct.chore.id,expectedVersion:1,scope:'occurrence'}]);
 assert.ok((await board()).chores.find((item)=>item.id===direct.chore.id).archivedAt);
-console.log('Database checks passed: migrations, two-user approvals, RLS, create/edit/archive, recurrence, stale edits, completion retries, and saved member totals.');
+console.log('Database checks passed: migrations, two-user approvals, RLS, create/edit/archive, recurrence, completion undo/retries, stale edits, and saved member totals.');
 await db.close();

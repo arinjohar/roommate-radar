@@ -133,6 +133,44 @@ test('recurring chores wait for completion and materialize only one missed occur
   assert.equal(board.chores.filter((chore) => chore.title === 'Daily reset').length, 2);
 });
 
+test('undo completion restores the chore, points, and recurring occurrence', async () => {
+  const storage = createMemoryStorage();
+  let currentTime = new Date('2026-09-05T12:00:00.000Z');
+  const services = createLocalServices(storage, { now: () => currentTime });
+  const { household, member } = await services.households.create({
+    householdName: 'Undo house',
+    displayName: 'Taylor',
+    avatarColor: '#9ED9C5',
+  });
+  const created = await services.chores.requestChore({
+    householdId: household.id,
+    requestedById: member.id,
+    title: 'Daily reset',
+    points: 3,
+    assigneeIds: [member.id],
+    dueAt: '2026-09-05T18:00:00.000Z',
+    dueInDays: 0,
+    recurrence: 'every 1 day',
+    starterTitle: null,
+  });
+  assert.equal(created.status, 'created');
+  if (created.status !== 'created') return;
+
+  await services.chores.completeChore({ householdId: household.id, choreId: created.chore.id, memberId: member.id });
+  currentTime = new Date('2026-09-06T19:00:00.000Z');
+  let board = await services.chores.getBoard(household.id);
+  assert.equal(board.chores.filter((chore) => chore.title === 'Daily reset').length, 2);
+
+  await services.chores.undoCompletion({ householdId: household.id, choreId: created.chore.id, memberId: member.id });
+  board = await services.chores.getBoard(household.id);
+  assert.equal(board.chores.filter((chore) => chore.title === 'Daily reset').length, 1);
+  assert.equal(board.completions.some((completion) => completion.choreId === created.chore.id), false);
+  assert.deepEqual(await services.chores.listMemberPoints(household.id), [{ memberId: member.id, totalPoints: 0 }]);
+
+  await services.chores.completeChore({ householdId: household.id, choreId: created.chore.id, memberId: member.id });
+  assert.deepEqual(await services.chores.listMemberPoints(household.id), [{ memberId: member.id, totalPoints: 3 }]);
+});
+
 test('a newly created household uses its real roster and can approve its own first chore', async () => {
   const storage = createMemoryStorage();
   const services = createLocalServices(storage, { now: () => new Date('2026-09-05T12:00:00.000Z') });
@@ -181,6 +219,10 @@ test('edits require approval, reject stale versions, and archive preserves award
   const second = await service.completeChore({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, memberId: DEMO_HOUSEHOLD_MEMBER_IDS[0] });
   assert.deepEqual(first, second);
   assert.equal(first.pointsAwarded, 5);
+  await assert.rejects(
+    service.undoCompletion({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, memberId: DEMO_HOUSEHOLD_MEMBER_IDS[0] }),
+    /Only the roommate who completed/,
+  );
   await assert.rejects(service.requestArchive({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, requestedById: DEMO_MEMBER_ID, scope: 'future', expectedVersion: 2 }), /history/);
   assert.equal((await service.getBoard(DEMO_HOUSEHOLD_ID)).completions.filter((item) => item.choreId === chore.id).length, 1);
 });

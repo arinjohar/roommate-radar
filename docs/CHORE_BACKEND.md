@@ -6,10 +6,10 @@ The chore board, completion history and Balance all use the selected services.
 ## Deployment
 
 1. Reconcile this branch with current main and review the SQL migration.
-2. Apply `supabase/migrations/202609060001_shared_chore_workflows.sql` to the
+2. Apply any unapplied files in `supabase/migrations` in filename order to the
    intended linked Supabase project using the team's database migration workflow.
-   Do not rerun the initial schema against an existing database. The new migration
-   backfills assignments and schedules and preserves completion rows.
+   Completion undo requires `202609060007_undo_chore_completion.sql`. Do not
+   rerun the initial schema against an existing database.
 3. Configure `EXPO_PUBLIC_DATA_SOURCE=supabase`, `EXPO_PUBLIC_SUPABASE_URL` and
    `EXPO_PUBLIC_SUPABASE_ANON_KEY` in the local/EAS environment. Anonymous auth
    must be enabled. Never put a service-role key in Expo public configuration.
@@ -47,7 +47,9 @@ This verifies SQL behavior, not hosted auth/network/device configuration.
   `auth.uid()` and household membership.
 - `get_chore_board` returns chores, awards, settings and pending requests and
   materializes eligible next occurrences transactionally.
-- `complete_chore` awards the first completion only. Points belong to the member
+- `complete_chore` awards the first completion only. `undo_chore_completion`
+  lets only the completing member remove that award and restore the occurrence,
+  rolling back only an untouched generated successor when needed. Points belong to the member
   who completes the chore, including when multiple people are assigned.
 - `member_point_totals` derives totals from saved awards. It is a security-invoker
   view so each caller retains the underlying membership visibility rules.

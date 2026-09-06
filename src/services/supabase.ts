@@ -109,6 +109,9 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
     async completeChore(input) {
       return mapCompletion(await rpc<DbCompletion>('complete_chore', { p_chore_id: input.choreId, p_idempotency_key: `complete-${input.choreId}` }));
     },
+    async undoCompletion(input) {
+      await rpc('undo_chore_completion', { p_chore_id: input.choreId });
+    },
   };
 
   return {
