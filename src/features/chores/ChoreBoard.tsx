@@ -30,8 +30,8 @@ function viewerMemberName(memberId: string, viewerId: string) {
   return memberId === viewerId ? 'You' : memberNames[memberId] ?? 'A roommate';
 }
 
-function assigneeLabel(assigneeId: string, viewerId: string) {
-  if (assigneeId === 'everyone') return 'Everyone';
+function assigneeLabel(assigneeId: string | null, viewerId: string) {
+  if (!assigneeId || assigneeId === 'everyone') return 'Everyone';
   return assigneeId.split('|').map((id) => viewerMemberName(id, viewerId)).join(' and ');
 }
 
@@ -90,7 +90,7 @@ function dueIntervalLabel(dueInDays: number | null) {
 }
 
 function starterFromChore(chore: Chore): ChoreStarter {
-  return { title: chore.title, points: chore.points, assigneeId: chore.assigneeId, recurrence: chore.recurrence, dueInDays: dueInDaysFromDate(chore.dueAt) };
+  return { title: chore.title, points: chore.points, assigneeId: chore.assigneeId ?? 'everyone', recurrence: chore.recurrence, dueInDays: dueInDaysFromDate(chore.dueAt) };
 }
 
 type ChoreBoardProps = {
