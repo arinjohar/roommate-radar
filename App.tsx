@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -27,11 +28,23 @@ const roommates = [
 
 export default function App() {
   const router = useRouter();
-  const { session } = useHouseholdSession();
+  const { session, memberships, selectMembership } = useHouseholdSession();
+  const [householdError, setHouseholdError] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
+  const householdChoices = memberships.length > 0 ? memberships : session ? [session] : [];
 
   const showComingSoon = (route: '/create' | '/join') => router.push(route);
+
+  const openHousehold = async (membership: typeof householdChoices[number]) => {
+    setHouseholdError(null);
+    try {
+      if (membership.household.id !== session?.household.id) await selectMembership(membership);
+      router.push('/home');
+    } catch {
+      setHouseholdError('We couldn’t open that household. Check your connection and try again.');
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -63,22 +76,29 @@ export default function App() {
                 tensions from turning into big ones.
               </Text>
 
-              <View style={[styles.actions, isWide && styles.actionsWide]}>
-                {session ? (
-                  <Pressable
+              {householdChoices.length > 0 ? <View style={styles.householdList}>
+                <Text style={styles.householdListLabel}>YOUR HOUSEHOLDS</Text>
+                {householdChoices.map((membership) => {
+                  const isActive = membership.household.id === session?.household.id;
+                  return <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Return to ${session.household.name}`}
-                    onPress={() => router.push('/home')}
-                    style={({ pressed }) => [styles.returnButton, pressed && styles.buttonPressed]}
+                    accessibilityLabel={`Open ${membership.household.name}`}
+                    accessibilityState={{ selected: isActive }}
+                    key={membership.household.id}
+                    onPress={() => void openHousehold(membership)}
+                    style={({ pressed }) => [styles.householdOption, isActive && styles.householdOptionActive, pressed && styles.buttonPressed]}
                   >
-                    <View style={styles.returnButtonCopy}>
-                      <Text style={styles.returnButtonLabel}>YOUR HOUSEHOLD</Text>
-                      <Text numberOfLines={1} style={styles.returnButtonName}>{session.household.name}</Text>
+                    <View style={styles.householdOptionCopy}>
+                      <Text numberOfLines={1} style={styles.householdOptionName}>{membership.household.name}</Text>
+                      <Text style={styles.householdOptionMeta}>You as {membership.member.displayName}</Text>
                     </View>
-                    <Text style={styles.returnButtonText}>Return to household</Text>
-                    <Text style={styles.returnButtonArrow}>→</Text>
-                  </Pressable>
-                ) : null}
+                    <Text style={styles.householdOptionOpen}>{isActive ? 'Open' : 'Open →'}</Text>
+                  </Pressable>;
+                })}
+                {householdError ? <Text accessibilityLiveRegion="polite" style={styles.householdError}>{householdError}</Text> : null}
+              </View> : null}
+
+              <View style={[styles.actions, isWide && styles.actionsWide]}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create a household"
@@ -190,14 +210,17 @@ const styles = StyleSheet.create({
   titleWide: { fontSize: 62, lineHeight: 66, letterSpacing: -3 },
   titleAccent: { color: colors.coral },
   subtitle: { maxWidth: 540, marginTop: 22, color: colors.muted, fontSize: 17, lineHeight: 26 },
+  householdList: { maxWidth: 540, marginTop: 28, gap: 8 },
+  householdListLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  householdOption: { minHeight: 62, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 15, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  householdOptionActive: { borderColor: colors.mint, backgroundColor: colors.mintPale },
+  householdOptionCopy: { flex: 1, minWidth: 0 },
+  householdOptionName: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  householdOptionMeta: { color: colors.muted, marginTop: 3, fontSize: 11, fontWeight: '600' },
+  householdOptionOpen: { color: colors.coralDark, fontSize: 12, fontWeight: '900' },
+  householdError: { color: colors.coralDark, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   actions: { marginTop: 32, gap: 12 },
   actionsWide: { flexDirection: 'row' },
-  returnButton: { minHeight: 66, paddingHorizontal: 17, borderRadius: 15, backgroundColor: colors.mintPale, borderWidth: 1.5, borderColor: colors.mint, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  returnButtonCopy: { flex: 1, minWidth: 0 },
-  returnButtonLabel: { color: colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
-  returnButtonName: { color: colors.ink, fontSize: 15, fontWeight: '900', marginTop: 3 },
-  returnButtonText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
-  returnButtonArrow: { color: colors.coralDark, fontSize: 20, fontWeight: '900' },
   primaryButton: { minHeight: 54, paddingHorizontal: 21, borderRadius: 15, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.17, shadowRadius: 13, elevation: 4 },
   primaryButtonText: { color: colors.paper, fontSize: 15, fontWeight: '800' },
   buttonArrow: { color: colors.mint, fontSize: 21, lineHeight: 21 },

@@ -148,6 +148,7 @@ they are not part of the two-day calculation.
 
 ```text
 Landing
+├── Saved households → Select household → Home
 ├── Create household → Name household → Add/select identity → Home
 └── Join with code → Enter code → Add/select identity → Home
 
