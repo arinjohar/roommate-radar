@@ -5,13 +5,14 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import { AppHeader } from '../src/components/AppHeader';
 import { useHouseholdSession } from '../src/context/HouseholdSessionContext';
 import { ChoreBoard } from '../src/features/chores/ChoreBoard';
+import { ChoreCalendar } from '../src/features/chores/ChoreCalendar';
 import { FairnessPanel } from '../src/features/fairness/FairnessPanel';
 import { MembersPanel } from '../src/features/members/MembersPanel';
 import { services } from '../src/services';
 import { colors, spacing } from '../src/theme/tokens';
 import type { Member } from '../src/types/domain';
 
-const tabs = ['Chores', 'Balance', 'Pulse', 'Members'] as const;
+const tabs = ['Chores', 'Calendar', 'Balance', 'Pulse', 'Members'] as const;
 type Tab = typeof tabs[number];
 
 export default function HomeScreen() {
@@ -147,6 +148,7 @@ export default function HomeScreen() {
 
 function HouseholdPanel({ activeTab, householdId, householdName, memberId }: { activeTab: Tab; householdId: string; householdName: string; memberId: string }) {
   if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} householdName={householdName} memberId={memberId} />;
+  if (activeTab === 'Calendar') return <ChoreCalendar householdId={householdId} memberId={memberId} />;
   if (activeTab === 'Members') return <MembersPanel householdId={householdId} currentMemberId={memberId} />;
   return <FairnessPanel householdId={householdId} memberId={memberId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
@@ -203,8 +205,8 @@ const styles = StyleSheet.create({
   inviteCopy: { color: '#DCE6E2', marginTop: 10, fontSize: 13, lineHeight: 19 },
   next: { color: colors.ink, marginTop: 34, fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   nextCopy: { color: colors.muted, marginTop: 8, fontSize: 15, lineHeight: 22 },
-  tabRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.lg },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 13, backgroundColor: colors.mintPale },
+  tabRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.lg },
+  tab: { flexGrow: 1, flexBasis: '29%', alignItems: 'center', paddingVertical: 13, borderRadius: 13, backgroundColor: colors.mintPale },
   tabActive: { backgroundColor: colors.ink },
   tabText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
   tabTextActive: { color: colors.paper },
