@@ -15,16 +15,27 @@ export default function CreateHouseholdScreen() {
   const [displayName, setDisplayName] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const householdError = submitted && !householdName.trim() ? 'Give your home a name so everyone recognizes it.' : undefined;
   const nameError = submitted && !displayName.trim() ? 'Add the name your roommates know you by.' : undefined;
 
   const handleCreate = async () => {
     setSubmitted(true);
-    if (!householdName.trim() || !displayName.trim()) return;
+    if (!householdName.trim() || !displayName.trim()) {
+      setSubmitError(null);
+      return;
+    }
     setLoading(true);
-    await createHousehold({ householdName: householdName.trim(), displayName: displayName.trim() });
-    router.replace('/home');
+    setSubmitError(null);
+    try {
+      await createHousehold({ householdName: householdName.trim(), displayName: displayName.trim() });
+      router.replace('/home');
+    } catch {
+      setSubmitError('We couldn’t create your household just now. Check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
@@ -37,6 +48,7 @@ export default function CreateHouseholdScreen() {
         <View style={styles.form}>
           <TextField label="What do you call your household?" placeholder="e.g. The Sunflower House" value={householdName} onChangeText={setHouseholdName} autoCapitalize="words" returnKeyType="next" error={householdError} />
           <TextField label="What should roommates call you?" placeholder="Your first name" value={displayName} onChangeText={setDisplayName} autoCapitalize="words" returnKeyType="done" onSubmitEditing={handleCreate} error={nameError} />
+          {submitError ? <Text accessibilityLiveRegion="polite" style={styles.submitError}>{submitError}</Text> : null}
           <Button label="Create household" onPress={handleCreate} loading={loading} />
         </View>
         <Text style={styles.footnote}>You’ll get an invite code to share next. Nothing is public outside your household.</Text>
@@ -54,5 +66,6 @@ const styles = StyleSheet.create({
   title: { marginTop: spacing.md, color: colors.ink, fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: -1.4 },
   subtitle: { marginTop: spacing.sm, color: colors.muted, fontSize: 16, lineHeight: 24 },
   form: { gap: spacing.md, marginTop: spacing.lg },
+  submitError: { color: colors.danger, fontSize: 13, fontWeight: '700', lineHeight: 19 },
   footnote: { marginTop: spacing.md, color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

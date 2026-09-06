@@ -8,6 +8,14 @@ import { TextField } from '../../src/components/TextField';
 import { useHouseholdSession } from '../../src/context/HouseholdSessionContext';
 import { colors, spacing } from '../../src/theme/tokens';
 
+function inviteFailureMessage(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('invite') || message.includes('not found') || message.includes('does not exist')) {
+    return 'That invite code isn’t active. Check it with your roommate or ask them to send a fresh one.';
+  }
+  return 'We couldn’t join the household just now. Check your connection and try again.';
+}
+
 export default function JoinHouseholdScreen() {
   const router = useRouter();
   const { joinHousehold } = useHouseholdSession();
@@ -15,16 +23,27 @@ export default function JoinHouseholdScreen() {
   const [displayName, setDisplayName] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const inviteError = submitted && inviteCode.trim().length < 4 ? 'Enter the invite code your roommate sent.' : undefined;
   const nameError = submitted && !displayName.trim() ? 'Add the name your roommates know you by.' : undefined;
 
   const handleJoin = async () => {
     setSubmitted(true);
-    if (inviteCode.trim().length < 4 || !displayName.trim()) return;
+    if (inviteCode.trim().length < 4 || !displayName.trim()) {
+      setSubmitError(null);
+      return;
+    }
     setLoading(true);
-    await joinHousehold({ inviteCode: inviteCode.trim(), displayName: displayName.trim() });
-    router.replace('/home');
+    setSubmitError(null);
+    try {
+      await joinHousehold({ inviteCode: inviteCode.trim(), displayName: displayName.trim() });
+      router.replace('/home');
+    } catch (error) {
+      setSubmitError(inviteFailureMessage(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
@@ -35,8 +54,9 @@ export default function JoinHouseholdScreen() {
         <Text style={styles.title}>Join the household.</Text>
         <Text style={styles.subtitle}>Use the short code from a roommate. We’ll keep the conversation constructive from there.</Text>
         <View style={styles.form}>
-          <TextField label="Invite code" placeholder="e.g. HOME-7Q2K" value={inviteCode} onChangeText={setInviteCode} autoCapitalize="characters" autoCorrect={false} error={inviteError} />
+          <TextField label="Invite code" placeholder="e.g. HOME-7Q2K" value={inviteCode} onChangeText={(value) => setInviteCode(value.toUpperCase())} autoCapitalize="characters" autoCorrect={false} error={inviteError} />
           <TextField label="What should roommates call you?" placeholder="Your first name" value={displayName} onChangeText={setDisplayName} autoCapitalize="words" returnKeyType="done" onSubmitEditing={handleJoin} error={nameError} />
+          {submitError ? <Text accessibilityLiveRegion="polite" style={styles.submitError}>{submitError}</Text> : null}
           <Button label="Join household" onPress={handleJoin} loading={loading} />
         </View>
         <Text style={styles.footnote}>No code yet? Ask a roommate to create the household and send you their invite.</Text>
@@ -54,5 +74,6 @@ const styles = StyleSheet.create({
   title: { marginTop: spacing.md, color: colors.ink, fontSize: 34, lineHeight: 38, fontWeight: '900', letterSpacing: -1.4 },
   subtitle: { marginTop: spacing.sm, color: colors.muted, fontSize: 16, lineHeight: 24 },
   form: { gap: spacing.md, marginTop: spacing.lg },
+  submitError: { color: colors.danger, fontSize: 13, fontWeight: '700', lineHeight: 19 },
   footnote: { marginTop: spacing.md, color: colors.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });
