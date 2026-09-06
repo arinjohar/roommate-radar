@@ -1,14 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
 import {
-  Alert,
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useState } from 'react';
 
 const colors = {
   ink: '#132A2E', muted: '#5B6E70', cream: '#FFF9F0', paper: '#FFFFFF',
@@ -22,14 +24,38 @@ const roommates = [
   { initials: 'AR', color: colors.yellow, width: '42%' },
 ] as const;
 
+type OnboardingMode = 'create' | 'join' | null;
+
+const demoInviteCode = 'MAPLE7';
+
+const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 350));
+
+async function createHousehold(name: string) {
+  await pause();
+  if (name.trim().toLowerCase() === 'offline') {
+    throw new Error('We could not save that household just now. Check your connection and try again.');
+  }
+
+  return { name: name.trim(), inviteCode: demoInviteCode };
+}
+
+async function joinHousehold(code: string) {
+  await pause();
+  if (code !== demoInviteCode) {
+    throw new Error('That invite code is not active. Ask a roommate to resend it, then try again.');
+  }
+
+  return { name: 'Maple House' };
+}
+
 export default function App() {
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>(null);
 
-  const showComingSoon = (action: string) => Alert.alert(
-    `${action} is next`,
-    'The landing page is ready. Connect this button to the household onboarding flow on its feature branch.',
-  );
+  if (onboardingMode) {
+    return <OnboardingScreen mode={onboardingMode} onBack={() => setOnboardingMode(null)} />;
+  }
 
   return (
     <View style={styles.screen}>
@@ -65,7 +91,7 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create a household"
-                  onPress={() => showComingSoon('Household setup')}
+                  onPress={() => setOnboardingMode('create')}
                   style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.primaryButtonText}>Create a household</Text>
@@ -74,7 +100,7 @@ export default function App() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Join with an invite code"
-                  onPress={() => showComingSoon('Invite codes')}
+                  onPress={() => setOnboardingMode('join')}
                   style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
                 >
                   <Text style={styles.secondaryButtonText}>Join with a code</Text>
@@ -142,6 +168,122 @@ export default function App() {
   );
 }
 
+function OnboardingScreen({ mode, onBack }: { mode: Exclude<OnboardingMode, null>; onBack: () => void }) {
+  const isCreate = mode === 'create';
+  const [value, setValue] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [complete, setComplete] = useState<{ name: string; inviteCode?: string } | null>(null);
+
+  const updateValue = (nextValue: string) => {
+    setValue(isCreate ? nextValue : nextValue.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+    if (error) setError(null);
+  };
+
+  const submit = async () => {
+    const cleanedValue = value.trim();
+    if (!cleanedValue) {
+      setError(isCreate ? 'Add a household name so everyone knows where they belong.' : 'Enter the invite code your roommate shared.');
+      return;
+    }
+
+    if (!isCreate && cleanedValue.length < 4) {
+      setError('That code looks a little short. Invite codes are at least four characters.');
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      if (isCreate) {
+        const household = await createHousehold(cleanedValue);
+        setComplete(household);
+      } else {
+        const household = await joinHousehold(cleanedValue);
+        setComplete(household);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const title = isCreate ? 'Start your household' : 'Join your household';
+  const description = isCreate
+    ? 'Give your shared space a name. You can invite roommates right after.'
+    : 'Use the invite code from a roommate to find your shared space.';
+
+  return (
+    <View style={styles.screen}>
+      <StatusBar style="dark" />
+      <View pointerEvents="none" style={styles.topGlow} />
+      <ScrollView contentContainerStyle={styles.onboardingScroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.onboardingShell}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back to landing page" onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>← Back</Text>
+          </Pressable>
+          <View style={styles.onboardingBrand}>
+            <RadarMark size={36} />
+            <Text style={styles.brandName}>Roommate Radar</Text>
+          </View>
+          <View style={styles.onboardingCard}>
+            {complete ? (
+              <View style={styles.completeContent}>
+                <View style={styles.successIcon}><Text style={styles.successIconText}>✓</Text></View>
+                <Text style={styles.formEyebrow}>YOU’RE ALL SET</Text>
+                <Text style={styles.formTitle}>{complete.name} is ready.</Text>
+                <Text style={styles.formDescription}>
+                  {complete.inviteCode
+                    ? `Share ${complete.inviteCode} with your roommates so they can join the same household.`
+                    : 'You’re connected to this household. Next, choose how you’d like to appear to your roommates.'}
+                </Text>
+                <Pressable accessibilityRole="button" onPress={onBack} style={({ pressed }) => [styles.primaryButton, styles.formButton, pressed && styles.buttonPressed]}>
+                  <Text style={styles.primaryButtonText}>Back to welcome</Text>
+                  <Text style={styles.buttonArrow}>→</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.formEyebrow}>{isCreate ? 'A FRESH START' : 'WELCOME BACK'}</Text>
+                <Text style={styles.formTitle}>{title}</Text>
+                <Text style={styles.formDescription}>{description}</Text>
+                <Text style={styles.inputLabel}>{isCreate ? 'Household name' : 'Invite code'}</Text>
+                <TextInput
+                  accessibilityLabel={isCreate ? 'Household name' : 'Invite code'}
+                  autoCapitalize={isCreate ? 'words' : 'characters'}
+                  autoCorrect={false}
+                  editable={!isSubmitting}
+                  maxLength={isCreate ? 48 : 12}
+                  onChangeText={updateValue}
+                  onSubmitEditing={submit}
+                  placeholder={isCreate ? 'e.g. Maple House' : 'e.g. MAPLE7'}
+                  placeholderTextColor="#829092"
+                  returnKeyType="done"
+                  style={[styles.textInput, error && styles.textInputError]}
+                  value={value}
+                />
+                {error ? <Text accessibilityLiveRegion="polite" style={styles.formError}>{error}</Text> : null}
+                {!isCreate ? <Text style={styles.helpText}>For this demo, try code {demoInviteCode}.</Text> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: isSubmitting, disabled: isSubmitting }}
+                  disabled={isSubmitting}
+                  onPress={submit}
+                  style={({ pressed }) => [styles.primaryButton, styles.formButton, (pressed || isSubmitting) && styles.buttonPressed, isSubmitting && styles.buttonDisabled]}
+                >
+                  {isSubmitting ? <ActivityIndicator color={colors.mint} /> : <><Text style={styles.primaryButtonText}>{isCreate ? 'Create household' : 'Join household'}</Text><Text style={styles.buttonArrow}>→</Text></>}
+                </Pressable>
+              </>
+            )}
+          </View>
+          <Text style={styles.onboardingFooter}>A little clarity makes a home feel lighter.</Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 function RadarMark({ size }: { size: number }) {
   return (
     <View accessible={false} style={[styles.radarMark, { height: size, width: size, borderRadius: size / 2 }]}>
@@ -167,6 +309,26 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
   shell: { width: '100%', maxWidth: 1180, alignSelf: 'center', flex: 1, paddingTop: Platform.OS === 'ios' ? 58 : 36, paddingHorizontal: 24, paddingBottom: 24 },
   shellWide: { paddingHorizontal: 54 },
+  onboardingScroll: { flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: Platform.OS === 'ios' ? 58 : 36, paddingBottom: 36 },
+  onboardingShell: { width: '100%', maxWidth: 520, alignSelf: 'center' },
+  backButton: { alignSelf: 'flex-start', paddingVertical: 10, paddingRight: 12, marginBottom: 30 },
+  backButtonText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  onboardingBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 26 },
+  onboardingCard: { borderRadius: 28, padding: 25, backgroundColor: colors.paper, borderWidth: 1, borderColor: '#EEF1EE', shadowColor: '#28443E', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.12, shadowRadius: 26, elevation: 6 },
+  formEyebrow: { color: colors.coralDark, fontSize: 10, fontWeight: '900', letterSpacing: 1.35, marginBottom: 11 },
+  formTitle: { color: colors.ink, fontSize: 30, lineHeight: 35, fontWeight: '900', letterSpacing: -1.1 },
+  formDescription: { color: colors.muted, fontSize: 15, lineHeight: 23, marginTop: 12 },
+  inputLabel: { color: colors.ink, fontSize: 13, fontWeight: '800', marginTop: 27, marginBottom: 9 },
+  textInput: { minHeight: 54, borderRadius: 14, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.cream, paddingHorizontal: 15, color: colors.ink, fontSize: 16, fontWeight: '700' },
+  textInputError: { borderColor: colors.coral },
+  formError: { color: colors.coralDark, fontSize: 13, lineHeight: 19, fontWeight: '700', marginTop: 10 },
+  helpText: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 10 },
+  formButton: { marginTop: 24, width: '100%' },
+  buttonDisabled: { opacity: 0.82 },
+  completeContent: { alignItems: 'flex-start' },
+  successIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mintPale, marginBottom: 20 },
+  successIconText: { color: colors.ink, fontSize: 23, fontWeight: '900' },
+  onboardingFooter: { color: colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'center', marginTop: 25 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandName: { color: colors.ink, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
