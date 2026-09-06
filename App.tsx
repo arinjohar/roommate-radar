@@ -124,7 +124,7 @@ export default function App() {
               </View>
             </View>
 
-            <View style={[styles.previewWrap, isWide && styles.previewWrapWide]}>
+            <View pointerEvents="none" style={[styles.previewWrap, isWide && styles.previewWrapWide]}>
               <View style={styles.decorativeDotGrid}>
                 {Array.from({ length: 12 }).map((_, index) => <View key={index} style={styles.decorativeDot} />)}
               </View>
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   householdOptionOpen: { color: colors.coralDark, fontSize: 12, fontWeight: '900' },
   householdError: { color: colors.coralDark, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   actions: { marginTop: 32, gap: 12 },
-  actionsWide: { flexDirection: 'row' },
+  actionsWide: { flexDirection: 'row', flexWrap: 'wrap' },
   primaryButton: { minHeight: 54, paddingHorizontal: 21, borderRadius: 15, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.17, shadowRadius: 13, elevation: 4 },
   primaryButtonText: { color: colors.paper, fontSize: 15, fontWeight: '800' },
   buttonArrow: { color: colors.mint, fontSize: 21, lineHeight: 21 },
