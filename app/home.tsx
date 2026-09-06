@@ -20,6 +20,7 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('Chores');
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const [profileCreatorMemberId, setProfileCreatorMemberId] = useState<string | null>(null);
   const [exitDialog, setExitDialog] = useState<'owner-leave' | 'delete' | null>(null);
   const [isOwnerMenuOpen, setIsOwnerMenuOpen] = useState(false);
   const [newOwnerId, setNewOwnerId] = useState('');
@@ -29,16 +30,36 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!session || !isProfileSettingsOpen) return;
     let active = true;
-    services.households.listMembers(session.household.id)
-      .then((items) => { if (active) setMembers(items); })
-      .catch(() => { if (active) setProfileError('We could not load the household members. Try again.'); });
-    return () => { active = false; };
-  }, [isProfileSettingsOpen, session]);
+    let latestRequest = 0;
+    const refreshProfile = async () => {
+      const request = ++latestRequest;
+      try {
+        const [household, items] = await Promise.all([
+          services.households.get(session.household.id),
+          services.households.listMembers(session.household.id),
+        ]);
+        if (!household) throw new Error('Household not found.');
+        if (active && request === latestRequest) {
+          setProfileCreatorMemberId(household.creatorMemberId);
+          setMembers(items);
+          setProfileError(null);
+        }
+      } catch {
+        if (active && request === latestRequest) setProfileError('We could not refresh the household profile. Try again.');
+      }
+    };
+    void refreshProfile();
+    const interval = setInterval(() => void refreshProfile(), 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isProfileSettingsOpen, session?.household.id]);
 
   if (!session) return <Redirect href="/" />;
 
   const initial = session.member.displayName.slice(0, 1).toUpperCase();
-  const isCreator = session.household.creatorMemberId === session.member.id;
+  const isCreator = (profileCreatorMemberId ?? session.household.creatorMemberId) === session.member.id;
   const eligibleNewOwners = members.filter((member) => member.id !== session.member.id);
   const selectedNewOwner = eligibleNewOwners.find((member) => member.id === newOwnerId);
 
