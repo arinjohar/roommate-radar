@@ -109,3 +109,21 @@ test('board completions and Balance totals share durable local storage', async (
   assert.deepEqual(await restored.chores.listMemberPoints(household.id), [{ memberId: member.id, totalPoints: 4 }]);
   assert.equal((await restored.chores.listCompletions(household.id, '2020-01-01', '2100-01-01')).length, 1);
 });
+
+test('local memberships keep earlier household data reachable after creating another household', async () => {
+  const storage = createMemoryStorage();
+  const services = createLocalServices(storage);
+  const first = await services.households.create({ householdName: 'Maple house', displayName: 'Ari', avatarColor: '#F36F56' });
+  const firstChore = await services.chores.requestChore({ householdId: first.household.id, requestedById: first.member.id, title: 'Water plants', points: 2, assigneeIds: [first.member.id], recurrence: 'once', dueAt: '', dueInDays: null, starterTitle: null });
+  assert.equal(firstChore.status, 'created');
+  if (firstChore.status !== 'created') return;
+  await services.chores.completeChore({ householdId: first.household.id, choreId: firstChore.chore.id, memberId: first.member.id });
+
+  const second = await services.households.create({ householdName: 'Cedar house', displayName: 'Ari', avatarColor: '#F36F56' });
+
+  const restored = createLocalServices(storage);
+  const memberships = await restored.households.listMemberships();
+  assert.deepEqual(memberships.map((membership) => membership.household.name), ['Maple house', 'Cedar house']);
+  assert.equal((await restored.chores.listCompletions(first.household.id, '2020-01-01', '2100-01-01')).length, 1);
+  assert.equal((await restored.households.get(second.household.id))?.name, 'Cedar house');
+});

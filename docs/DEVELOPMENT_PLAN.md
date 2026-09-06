@@ -41,6 +41,8 @@ By the final demo:
   call a database SDK directly.
 - Use React Context plus hooks for session and household state. Do not add a large
   state library during the hackathon.
+- Persist the active household and the complete membership set, so one person can
+  create or join multiple households without making earlier household data unreachable.
 
 ### Backend
 
