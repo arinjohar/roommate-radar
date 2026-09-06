@@ -60,6 +60,15 @@ async function main() {
     p_avatar_color: '#F36F56',
   });
   assert(created?.household?.id && created?.household?.invite_code, 'create_household returned an incomplete membership.');
+  const ownerMemberships = await rpc(owner.access_token, 'list_my_household_memberships', {});
+  assert(
+    ownerMemberships.some((membership) => (
+      membership.household_id === created.household.id
+      && membership.member_id === created.member.id
+      && membership.creator_member_id === created.member.id
+    )),
+    'The creator membership is unavailable after creating a household.',
+  );
 
   const hiddenBeforeJoin = await rest(
     guest.access_token,
@@ -73,6 +82,15 @@ async function main() {
     p_avatar_color: '#9ED9C5',
   });
   assert(joined?.member?.id, 'join_household did not return a member.');
+  const guestMemberships = await rpc(guest.access_token, 'list_my_household_memberships', {});
+  assert(
+    guestMemberships.some((membership) => (
+      membership.household_id === created.household.id
+      && membership.member_id === joined.member.id
+      && membership.creator_member_id === created.member.id
+    )),
+    'The joined membership is unavailable after joining a household.',
+  );
 
   const members = await rest(
     guest.access_token,

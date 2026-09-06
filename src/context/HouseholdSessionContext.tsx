@@ -17,6 +17,13 @@ type HouseholdSessionContextValue = {
 
 const HouseholdSessionContext = createContext<HouseholdSessionContextValue | null>(null);
 
+function includeMembership(current: HouseholdMembership[], next: HouseholdMembership) {
+  return [
+    ...current.filter((membership) => membership.household.id !== next.household.id),
+    next,
+  ];
+}
+
 export function HouseholdSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<HouseholdSession | null>(null);
   const [memberships, setMemberships] = useState<HouseholdMembership[]>([]);
@@ -39,12 +46,14 @@ export function HouseholdSessionProvider({ children }: PropsWithChildren) {
     async createHousehold(input: CreateHouseholdInput) {
       const next = await householdService.createHousehold(input);
       setSession(next);
-      setMemberships(await householdService.listMemberships());
+      setMemberships((current) => includeMembership(current, next));
+      void householdService.listMemberships().then(setMemberships).catch(() => undefined);
     },
     async joinHousehold(input: JoinHouseholdInput) {
       const next = await householdService.joinHousehold(input);
       setSession(next);
-      setMemberships(await householdService.listMemberships());
+      setMemberships((current) => includeMembership(current, next));
+      void householdService.listMemberships().then(setMemberships).catch(() => undefined);
     },
     async selectMembership(membership: HouseholdMembership) {
       setSession(await householdService.selectMembership(membership));

@@ -150,6 +150,9 @@ grant execute on function public.leave_household(uuid) to authenticated;
 grant execute on function public.delete_household(uuid) to authenticated;
 grant execute on function public.transfer_household_ownership_and_leave(uuid, uuid) to authenticated;
 
+-- PostgreSQL cannot replace a function when its table-shaped return type changes.
+drop function if exists public.list_my_household_memberships();
+
 create or replace function public.list_my_household_memberships()
 returns table(
   household_id uuid,
