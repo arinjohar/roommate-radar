@@ -96,7 +96,15 @@ export function FairnessPanel({ householdId, memberId, mode }: { householdId: st
     return <View style={styles.stack}>
       <View style={styles.heading}>
         <View style={styles.headingCopy}><Text style={styles.kicker}>THIS WEEK’S EFFORT</Text><Text style={styles.title}>Everyone’s share, at a glance</Text></View>
-        <View style={styles.status}><Text style={styles.statusText}>{fairnessScore === null ? 'Waiting for data' : status === 'balanced' ? 'In balance' : 'Needs a nudge'}</Text></View>
+        <View
+          accessibilityLabel={fairnessScore === null
+            ? 'Fairness Score, waiting for data'
+            : `Fairness Score, ${fairnessScore} out of 100, ${status === 'balanced' ? 'in balance' : 'needs a nudge'}`}
+          style={styles.status}
+        >
+          <Text style={styles.statusScore}>{fairnessScore === null ? 'FAIRNESS SCORE' : `FAIRNESS ${fairnessScore}/100`}</Text>
+          <Text style={styles.statusText}>{fairnessScore === null ? 'Waiting for data' : status === 'balanced' ? 'In balance' : 'Needs a nudge'}</Text>
+        </View>
       </View>
       <View style={styles.scoreCard}>
         <View style={styles.scoreCopy}>
@@ -207,7 +215,8 @@ const styles = StyleSheet.create({
   headingCopy: { flex: 1, minWidth: 0 },
   kicker: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 5 },
   title: { color: colors.ink, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  status: { flexShrink: 0, backgroundColor: '#FFF0E8', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  status: { flexShrink: 0, alignItems: 'center', backgroundColor: '#FFF0E8', borderRadius: 15, paddingHorizontal: 9, paddingVertical: 6 },
+  statusScore: { color: colors.coralDark, fontSize: 7, fontWeight: '900', letterSpacing: 0.5 },
   statusText: { color: colors.coralDark, fontSize: 9, fontWeight: '900' },
   scoreCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: 22, backgroundColor: colors.mintPale, borderWidth: 1, borderColor: '#CFE9DF' },
   scoreCopy: { flex: 1, minWidth: 0 },
