@@ -81,8 +81,9 @@ Screens obtain this service through `src/services/index.ts`. The former standalo
 
 - New chore writes accept 1–10 effort points, multiple household member IDs,
   an optional ISO due date, and structured `repeatEvery`/`repeatUnit` values.
-  Legacy recurrence strings remain a compatibility/display field. Repeating
-  chores require a due date; the UI anchors newly selected dates at 18:00 UTC.
+  Legacy recurrence strings remain a compatibility/display field. When a
+  repeating chore has no due date, services assign its next scheduled occurrence
+  at 18:00 UTC (including the next named weekday for weekday schedules).
 - `chore_assignees` stores assignments; no rows means Everyone. Existing
   single-assignee values are backfilled by the migration.
 - `chore_series` retains future settings. Editing one occurrence preserves the

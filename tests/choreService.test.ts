@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextDueDate } from '../src/services/choreSchedule';
+import { initialRecurringDueDate, nextDueDate } from '../src/services/choreSchedule';
 
 import type { RoommateRadarServices } from '../src/services/contracts';
 import { createDemoData, DEMO_HOUSEHOLD_ID } from '../src/services/demoData';
@@ -211,4 +211,36 @@ test('an occurrence edit leaves future settings intact and stopping a series pre
 
 test('monthly recurrence clamps at month end', () => {
   assert.equal(nextDueDate('2028-01-31T18:00:00Z', 1, 'months'), '2028-02-29T18:00:00.000Z');
+});
+
+test('recurring chores without a due date use the next scheduled occurrence', async () => {
+  const storage = createMemoryStorage();
+  const service = createLocalServices(storage, { now: () => new Date('2026-09-06T12:00:00.000Z') }).chores;
+  const result = await service.requestChore({
+    householdId: DEMO_HOUSEHOLD_ID,
+    requestedById: DEMO_MEMBER_ID,
+    title: 'Put bins out',
+    points: 2,
+    assigneeIds: [],
+    dueAt: '',
+    dueInDays: null,
+    recurrence: 'every Wednesday',
+    starterTitle: null,
+  });
+  assert.equal(result.status, 'pending');
+  if (result.status !== 'pending') return;
+  assert.equal(result.pending.dueAt, '2026-09-09T18:00:00.000Z');
+  assert.equal(result.pending.dueInDays, 3);
+
+  await approveRequest(service, result.pending.id);
+  const chore = (await service.getBoard(DEMO_HOUSEHOLD_ID)).chores.find((item) => item.title === 'Put bins out');
+  assert.equal(chore?.dueAt, '2026-09-09T18:00:00.000Z');
+  assert.equal(chore?.recurrence, 'every Wednesday');
+});
+
+test('weekday schedules choose the following week after their 18:00 UTC slot', () => {
+  assert.equal(
+    initialRecurringDueDate('weekly on Wednesday', new Date('2026-09-09T19:00:00.000Z')),
+    '2026-09-16T18:00:00.000Z',
+  );
 });
