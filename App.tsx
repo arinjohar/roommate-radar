@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 
+import { RadarMark } from './src/components/RadarMark';
 import { useHouseholdSession } from './src/context/HouseholdSessionContext';
 
 const colors = {
@@ -158,16 +159,6 @@ export default function App() {
   );
 }
 
-function RadarMark({ size }: { size: number }) {
-  return (
-    <View accessible={false} style={[styles.radarMark, { height: size, width: size, borderRadius: size / 2 }]}>
-      <View style={[styles.radarRing, { height: size * 0.58, width: size * 0.58 }]} />
-      <View style={styles.radarNeedle} />
-      <View style={styles.radarCenter} />
-    </View>
-  );
-}
-
 function Promise({ label }: { label: string }) {
   return (
     <View style={styles.promise}>
@@ -186,10 +177,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandName: { color: colors.ink, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
-  radarMark: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.ink },
-  radarRing: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.52)' },
-  radarNeedle: { position: 'absolute', left: '50%', bottom: '50%', width: 2, height: '38%', backgroundColor: colors.mint, transform: [{ rotate: '42deg' }], transformOrigin: 'bottom' },
-  radarCenter: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: colors.paper },
   betaPill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: 'rgba(255,255,255,0.7)' },
   betaDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.coral },
   betaText: { color: colors.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.1 },
