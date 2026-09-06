@@ -71,12 +71,14 @@ function dueIntervalLabel(dueInDays: number | null) {
 
 type ChoreBoardProps = {
   householdId: string;
+  householdName: string;
   memberId: string;
   service?: ChoreService;
 };
 
 export function ChoreBoard({
   householdId,
+  householdName,
   memberId,
   service = services.chores,
 }: ChoreBoardProps) {
@@ -310,7 +312,7 @@ export function ChoreBoard({
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.boardHeader}><Text style={styles.eyebrow}>THIS WEEK</Text><Pressable accessibilityRole="button" accessibilityLabel="Open chore board settings" onPress={() => { setIsSavedOptionsOpen(false); setIsTrustLevelOpen(false); setIsCompletedHistoryOpen(false); setIsSettingsOpen(true); }} style={styles.settingsButton}><Text style={styles.settingsGear}>⚙</Text><View pointerEvents="none" style={styles.settingsGearCenter} /></Pressable></View>
+        <View style={styles.boardHeader}><Text style={styles.eyebrow}>{householdName.toLocaleUpperCase()} · THIS WEEK</Text><Pressable accessibilityRole="button" accessibilityLabel="Open chore board settings" onPress={() => { setIsSavedOptionsOpen(false); setIsTrustLevelOpen(false); setIsCompletedHistoryOpen(false); setIsSettingsOpen(true); }} style={styles.settingsButton}><Text style={styles.settingsGear}>⚙</Text><View pointerEvents="none" style={styles.settingsGearCenter} /></Pressable></View>
         <Text style={styles.title}>A little shared effort goes a long way.</Text>
         <Text style={styles.subtitle}>Mark a task when it’s done so the household picture stays kind and clear.</Text>
 

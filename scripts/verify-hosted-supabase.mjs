@@ -87,11 +87,11 @@ async function main() {
   assert(Array.isArray(demoHiddenBeforeJoin) && demoHiddenBeforeJoin.length === 0, 'RLS exposed the demo household before joining.');
 
   const demoMembership = await rpc(guest.access_token, 'join_household', {
-    p_invite_code: 'MAPLE4',
+    p_invite_code: 'RADAR4',
     p_display_name: `Verifier ${runId.slice(-4)}`,
     p_avatar_color: '#F4C95D',
   });
-  assert(demoMembership?.member?.id, 'MAPLE4 seed data is missing or join_household failed. Push seed data with --include-seed.');
+  assert(demoMembership?.member?.id, 'RADAR4 seed data is missing or join_household failed. Push seed data with --include-seed.');
 
   const chores = await rest(
     guest.access_token,

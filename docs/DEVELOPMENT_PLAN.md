@@ -283,7 +283,7 @@ Checkpoint: all six steps in the product loop pass on both platforms.
 Run this on iOS and Android before the final build:
 
 1. Fresh install opens to the Roommate Radar landing screen without clipping.
-2. Create “Maple House” or join it with the demo code.
+2. Create a household or join the seeded Shared Home household with its invite code.
 3. Chores show title, assignee, due state, and effort points.
 4. Complete “Clean bathroom” once; a second rapid tap does not duplicate it.
 5. Relaunch; the completion remains.
@@ -293,7 +293,7 @@ Run this on iOS and Android before the final build:
 9. Turn off networking; the app shows cached/seeded data or a recoverable error.
 10. Open Members and confirm the current household roster appears, with the active
     user labeled “(You)”.
-11. Reset the demo and repeat the 90-second pitch flow.
+11. Return to the welcome screen and repeat the 90-second pitch flow.
 
 ## 10. Risk register and cuts
 

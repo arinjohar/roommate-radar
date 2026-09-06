@@ -35,16 +35,16 @@ export default function HomeScreen() {
         <Text style={styles.inviteCopy}>Send it to your roommates so everyone starts from the same calm, shared view.</Text>
       </View>
       <Text style={styles.next}>A calmer week starts here.</Text>
-      <Text style={styles.nextCopy}>Here’s a friendly, at-a-glance demo of the work your household is sharing.</Text>
+      <Text style={styles.nextCopy}>Here’s a friendly, at-a-glance view of the work your household is sharing.</Text>
       <View style={styles.tabRow}>{tabs.map((tab) => <Pressable accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}><Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text></Pressable>)}</View>
-      <DemoPanel activeTab={activeTab} householdId={session.household.id} memberId={session.member.id} />
-      <Pressable accessibilityRole="button" onPress={() => { clearSession(); router.replace('/'); }} style={styles.reset}><Text style={styles.resetText}>Leave this demo household</Text></Pressable>
+      <HouseholdPanel activeTab={activeTab} householdId={session.household.id} householdName={session.household.name} memberId={session.member.id} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Return to the welcome screen" onPress={() => { clearSession(); router.replace('/'); }} style={styles.returnToWelcome}><Text style={styles.returnToWelcomeText}>Return to welcome screen</Text></Pressable>
     </ScrollView>
   </View>;
 }
 
-function DemoPanel({ activeTab, householdId, memberId }: { activeTab: Tab; householdId: string; memberId: string }) {
-  if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} memberId={memberId} />;
+function HouseholdPanel({ activeTab, householdId, householdName, memberId }: { activeTab: Tab; householdId: string; householdName: string; memberId: string }) {
+  if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} householdName={householdName} memberId={memberId} />;
   if (activeTab === 'Members') return <MembersPanel householdId={householdId} currentMemberId={memberId} />;
   return <FairnessPanel householdId={householdId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
@@ -83,6 +83,6 @@ const styles = StyleSheet.create({
   pulseArrow: { color: colors.mint, fontSize: 20, lineHeight: 20 },
   sent: { marginTop: spacing.md, alignSelf: 'flex-start', paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.mintPale },
   sentText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
-  reset: { alignSelf: 'center', paddingVertical: 14, marginTop: spacing.xl },
-  resetText: { color: colors.muted, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
+  returnToWelcome: { alignSelf: 'center', paddingVertical: 14, marginTop: spacing.xl },
+  returnToWelcomeText: { color: colors.muted, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
 });

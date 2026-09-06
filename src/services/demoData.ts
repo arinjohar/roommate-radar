@@ -10,11 +10,11 @@ export interface DemoData {
 }
 
 export const DEMO_HOUSEHOLD_ID = '10000000-0000-4000-8000-000000000001';
-export const DEMO_INVITE_CODE = 'MAPLE4';
+export const DEMO_INVITE_CODE = 'RADAR4';
 
 const household: Household = {
   id: DEMO_HOUSEHOLD_ID,
-  name: 'Maple House',
+  name: 'Shared Home',
   inviteCode: DEMO_INVITE_CODE,
   createdAt: '2026-09-01T16:00:00.000Z',
 };
