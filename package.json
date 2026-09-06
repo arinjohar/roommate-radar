@@ -1,19 +1,32 @@
 {
   "name": "roommate-radar",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.20",
+    "expo-constants": "~57.0.17",
+    "expo-linking": "~57.0.9",
+    "expo-router": "~57.0.19",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "4.27.0",
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
     "@types/react": "~19.2.2",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": ["react-native-screens"]
+    }
   },
   "scripts": {
     "start": "expo start",
@@ -21,8 +34,18 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "npm run test:fairness && npm run test:services",
+    "test:fairness": "tsc -p tsconfig.tests.json && node .test-dist/fairness/engine.test.js",
+    "test:services": "tsx --test tests/**/*.test.ts",
+    "check:env": "node scripts/validate-env.mjs",
+    "verify:hosted": "node scripts/verify-hosted-supabase.mjs",
+    "health": "npx expo-doctor",
+    "export:android": "expo export --platform android --output-dir .expo-exports/android",
+    "export:ios": "expo export --platform ios --output-dir .expo-exports/ios",
     "build:preview:android": "npx eas-cli@latest build --platform android --profile preview",
-    "build:preview:ios": "npx eas-cli@latest build --platform ios --profile preview"
+    "build:preview:ios": "npx eas-cli@latest build --platform ios --profile preview",
+    "build:production:android": "npx eas-cli@latest build --platform android --profile production",
+    "build:production:ios": "npx eas-cli@latest build --platform ios --profile production"
   },
   "private": true
 }

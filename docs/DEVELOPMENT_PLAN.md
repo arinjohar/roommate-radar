@@ -59,6 +59,12 @@ Required tables:
 | `completions` | `id`, `chore_id`, `member_id`, `points_awarded`, `completed_at` |
 | `pulse_responses` | `id`, `household_id`, `member_id`, `week_start`, `cleanliness`, `noise`, `communication` |
 
+The backend adds `households.created_by` and `members.user_id` to bind anonymous
+Supabase users to RLS-protected household membership. Completion retry keys and
+table timestamps are persistence details and do not change the client domain
+contract. The app defaults to a persistent AsyncStorage adapter; Supabase is
+selected only through `src/services/index.ts` after environment and auth setup.
+
 Create one `src/types/domain.ts` file from this contract before parallel feature
 work starts. IDs are strings, dates cross boundaries as ISO 8601 strings, and
 scores are integers. Changes to shared types require a small, early pull request.
@@ -97,11 +103,14 @@ Landing
 Home
 ├── Chores → Chore detail / complete
 ├── Balance → Weekly effort + suggestion
-└── Pulse → Three ratings → Weekly insight
+├── Pulse → Three ratings → Weekly insight
+└── Members → Current residence roster, with the active member labeled “(You)”
 ```
 
-Use a three-tab app after onboarding: **Chores**, **Balance**, and **Pulse**. Avoid
-nested navigation except the chore detail sheet.
+Use a four-tab app after onboarding: **Chores**, **Balance**, **Pulse**, and
+**Members**. The Members tab is a lightweight, read-only roster for orienting
+household conversations; it is not a permissions or social-management system.
+Avoid nested navigation except the chore detail sheet.
 
 ## 5. Team ownership and branch boundaries
 
@@ -141,6 +150,10 @@ Branch: `feature/backend-and-builds`
 - Implement service adapters matching the mock service interfaces.
 - Configure EAS project linkage, signing, preview profiles, and environment values.
 - Produce device builds by the end of day one and again after final integration.
+
+Before declaring the hosted path ready, this developer runs `npm run verify:hosted`
+against the linked project after `db push --include-seed`, then installs a preview
+build configured with the hosted public values on a physical Android and iOS device.
 
 This developer also acts as integrator, but does not rewrite other branches during
 merge. Broken contracts go back to the owning developer with a minimal reproduction.
@@ -275,7 +288,9 @@ Run this on iOS and Android before the final build:
 7. The under-contributing member receives a specific upcoming chore suggestion.
 8. Submit three pulse ratings; the app surfaces the lowest-rated category neutrally.
 9. Turn off networking; the app shows cached/seeded data or a recoverable error.
-10. Reset the demo and repeat the 90-second pitch flow.
+10. Open Members and confirm the current household roster appears, with the active
+    user labeled “(You)”.
+11. Reset the demo and repeat the 90-second pitch flow.
 
 ## 10. Risk register and cuts
 
