@@ -94,8 +94,8 @@ Screens obtain this service through `src/services/index.ts`. The former standalo
   preceding occurrence is completed or skipped and its next scheduled date is
   reached. At most one unfinished occurrence exists per series. There is no
   background scheduler or realtime dependency.
-- Delete archives active chores. Completed chores and their awarded points are
-  immutable through these workflows. Deleting This and future stops the series;
+- Delete archives active chores. Completed chores and their awarded points stay
+  immutable unless a household member explicitly undoes the completion. Deleting This and future stops the series;
   deleting one occurrence skips it. History-window settings hide older completed
   cards without deleting the stored awards.
 - `chore_board_settings` and `chore_requests` persist trust levels, saved options,
@@ -105,6 +105,9 @@ Screens obtain this service through `src/services/index.ts`. The former standalo
   stricter trust applies immediately. All policy checks run in database RPCs,
   including for the owner. Concurrent edits use versions and household locking.
 - Completion is awarded once per occurrence, even across two members/devices.
+  The roommate who completed a chore can undo it, removing their awarded points and
+  returning that occurrence to In progress. An untouched generated successor is
+  rolled back with it so a recurring series never has two unfinished occurrences.
   `completions.points_awarded` is the durable ledger; the RLS-protected
   `member_point_totals` view computes each member's overall total from it. Balance
   displays overall earned points alongside the existing weekly calculation.

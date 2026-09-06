@@ -125,6 +125,11 @@ export interface ChoreService {
     householdId: string;
     memberId: string;
   }): Promise<Completion>;
+  undoCompletion(input: {
+    choreId: string;
+    householdId: string;
+    memberId: string;
+  }): Promise<void>;
 }
 
 export interface PulseService {

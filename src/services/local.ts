@@ -625,6 +625,53 @@ export function createLocalServices(
           return addCompletion(data, chore, memberId, `${memberId}:${choreId}`);
         });
       },
+      undoCompletion({ householdId, choreId, memberId }) {
+        return mutateBoard(householdId, (data, settings, memberIds) => {
+          if (!memberIds.includes(memberId)) {
+            throw new Error('Join this household before undoing a completion.');
+          }
+          const chore = data.chores.find(
+            (candidate) => candidate.householdId === householdId && candidate.id === choreId,
+          );
+          const choreCompletions = data.completions.filter((candidate) => candidate.choreId === choreId);
+          const completion = choreCompletions[0];
+          if (!chore || !completion) {
+            throw new Error('That completion is no longer available. Refresh and try again.');
+          }
+          if (completion.memberId !== memberId) {
+            throw new Error('Only the roommate who completed this chore can undo it.');
+          }
+
+          if (choreCompletions.length === 1) {
+            const seriesId = chore.seriesId ?? chore.id;
+            const scheduledAt = chore.scheduledAt ?? chore.dueAt;
+            const laterOccurrences = data.chores.filter((candidate) => (
+              candidate.id !== chore.id
+              && (candidate.seriesId ?? candidate.id) === seriesId
+              && (candidate.scheduledAt ?? candidate.dueAt) > scheduledAt
+            ));
+            if (laterOccurrences.length > 1) {
+              throw new Error('A newer recurring occurrence has already changed. Undo the latest occurrence instead.');
+            }
+            const nextOccurrence = laterOccurrences[0];
+            if (nextOccurrence) {
+              const hasChanged = Boolean(nextOccurrence.archivedAt)
+                || (nextOccurrence.version ?? 1) !== 1
+                || data.completions.some((candidate) => candidate.choreId === nextOccurrence.id)
+                || settings.pendingChores.some((candidate) => candidate.choreId === nextOccurrence.id);
+              if (hasChanged) {
+                throw new Error('A newer recurring occurrence has already changed. Undo the latest occurrence instead.');
+              }
+              data.chores = data.chores.filter((candidate) => candidate.id !== nextOccurrence.id);
+            }
+          }
+
+          data.completions = data.completions.filter((candidate) => candidate.id !== completion.id);
+          for (const [requestKey, completionId] of Object.entries(data.completionRequestIds)) {
+            if (completionId === completion.id) delete data.completionRequestIds[requestKey];
+          }
+        });
+      },
     },
     pulse: {
       async list(householdId, weekStart) {

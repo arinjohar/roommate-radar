@@ -21,6 +21,9 @@ test('hosted board uses authenticated RPCs, structured schedules, and database p
     assert.equal(body.p_payload.repeatUnit, 'weeks');
     assert.deepEqual(body.p_payload.assigneeIds, ['member']);
     assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer user-token');
+    await services.chores.undoCompletion({ householdId: 'home', choreId: 'completed-chore', memberId: 'member' });
+    assert.equal(calls[1].url.endsWith('/rest/v1/rpc/undo_chore_completion'), true);
+    assert.deepEqual(JSON.parse(String(calls[1].init.body)), { p_chore_id: 'completed-chore' });
     assert.deepEqual(await services.chores.listMemberPoints('home'), [{ memberId: 'member', totalPoints: 12 }]);
     assert.deepEqual(await services.chores.list('home'), [{ id: 'active' }]);
   } finally { globalThis.fetch = originalFetch; }

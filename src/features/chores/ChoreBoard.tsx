@@ -96,6 +96,7 @@ export function ChoreBoard({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
+  const [undoingId, setUndoingId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPoints, setNewPoints] = useState(2);
   const [assigneeIds, setAssigneeIds] = useState<string[]>(['everyone']);
@@ -191,6 +192,22 @@ export function ChoreBoard({
       setError(completionError instanceof Error ? completionError.message : 'Could not mark that chore complete.');
     } finally {
       setCompletingId(null);
+    }
+  };
+
+  const undoComplete = async (chore: Chore) => {
+    if (undoingId) return;
+    setUndoingId(chore.id);
+    setError(null);
+    try {
+      await service.undoCompletion({ choreId: chore.id, householdId, memberId });
+      applySnapshot(await service.getBoard(householdId));
+      setNotice('Completion undone. Chore moved back to In progress.');
+      setVisibleList('active');
+    } catch (undoError) {
+      setError(undoError instanceof Error ? undoError.message : 'Could not undo that completion.');
+    } finally {
+      setUndoingId(null);
     }
   };
 
@@ -405,7 +422,7 @@ export function ChoreBoard({
         {!isLoading && !error && chores.length === 0 ? <EmptyState /> : null}
         {!isLoading && visibleList === 'active' && activeChores.length > 0 ? <View style={styles.list}>{activeChores.map((chore) => {
           const completion = completions.find((item) => item.choreId === chore.id);
-          return <View key={chore.id}><ChoreCard chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={completingId === chore.id} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => void complete(chore)} onChangePoints={(points) => void updatePoints(chore, points)} /><View style={styles.voteRow}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${chore.title}`} onPress={() => startEdit(chore)} style={styles.approveButton}><Text style={styles.approveText}>Edit</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${chore.title}`} onPress={() => { setDeleting(chore); setScope('occurrence'); scroll.current?.scrollTo({ y: 0, animated: true }); }} style={styles.rejectButton}><Text style={styles.rejectText}>Delete</Text></Pressable></View></View>;
+          return <View key={chore.id}><ChoreCard chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={completingId === chore.id} isUndoing={false} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => void complete(chore)} onUndoComplete={() => undefined} onChangePoints={(points) => void updatePoints(chore, points)} /><View style={styles.voteRow}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${chore.title}`} onPress={() => startEdit(chore)} style={styles.approveButton}><Text style={styles.approveText}>Edit</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${chore.title}`} onPress={() => { setDeleting(chore); setScope('occurrence'); scroll.current?.scrollTo({ y: 0, animated: true }); }} style={styles.rejectButton}><Text style={styles.rejectText}>Delete</Text></Pressable></View></View>;
         })}</View> : null}
         {!isLoading && visibleList === 'active' && chores.length > 0 && activeChores.length === 0 ? <View style={styles.activeEmpty}><Text style={styles.activeEmptyTitle}>You did it — all caught up! ✦</Text><Text style={styles.activeEmptyText}>The shared work is wrapped up. Take a breath, and visit Completed to celebrate the week’s progress.</Text></View> : null}
         {!isLoading && visibleList === 'pending' ? <View style={styles.list}>{pendingCount === 0 ? <Text style={styles.emptyFilterText}>No chore requests are waiting for approval.</Text> : <>{pendingChores.map((pending) => <PendingCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void runAction(() => voteOnPending(pending, vote))} />)}{pendingTrustChanges.map((pending) => <PendingTrustCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void runAction(() => voteOnPendingTrustChange(pending, vote))} />)}</>}</View> : null}
@@ -418,7 +435,7 @@ export function ChoreBoard({
           <View style={styles.completedSummary}><Text style={styles.completedSummaryText}>{completedByFilter === 'all' ? 'Everyone' : viewerMemberName(completedByFilter, memberId, householdMemberNames)} completed {completedSummary.length} {completedSummary.length === 1 ? 'task' : 'tasks'} · {completedPoints} {completedPoints === 1 ? 'point' : 'points'}</Text></View>
           {filteredCompletedChores.length === 0 ? <Text style={styles.emptyFilterText}>No completed chores by {completedByFilter === 'all' ? 'everyone' : viewerMemberName(completedByFilter, memberId, householdMemberNames)} yet.</Text> : <View style={styles.list}>{filteredCompletedChores.map((chore) => {
               const completion = recentCompletions.find((item) => item.choreId === chore.id);
-              return <ChoreCard key={chore.id} chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={false} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => undefined} onChangePoints={(points) => void updatePoints(chore, points)} />;
+              return <ChoreCard key={chore.id} chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={false} isUndoing={undoingId === chore.id} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => undefined} onUndoComplete={() => void undoComplete(chore)} onChangePoints={(points) => void updatePoints(chore, points)} />;
           })}</View>}
         </View> : null}
       </ScrollView>
@@ -426,10 +443,11 @@ export function ChoreBoard({
   );
 }
 
-type ChoreCardProps = { chore: Chore; completion?: Completion; viewerId: string; memberNames: Record<string, string>; isCompleting: boolean; isUpdatingPoints: boolean; onComplete: () => void; onChangePoints: (points: number) => void };
+type ChoreCardProps = { chore: Chore; completion?: Completion; viewerId: string; memberNames: Record<string, string>; isCompleting: boolean; isUndoing: boolean; isUpdatingPoints: boolean; onComplete: () => void; onUndoComplete: () => void; onChangePoints: (points: number) => void };
 
-export function ChoreCard({ chore, completion, viewerId, memberNames: names, isCompleting, isUpdatingPoints, onComplete, onChangePoints }: ChoreCardProps) {
+export function ChoreCard({ chore, completion, viewerId, memberNames: names, isCompleting, isUndoing, onComplete, onUndoComplete }: ChoreCardProps) {
   const isComplete = Boolean(completion);
+  const canUndoComplete = isComplete && completion?.memberId === viewerId;
   const due = chore.dueAt ? new Date(chore.dueAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : null;
   const isOverdue = !isComplete && isPastDue(chore.dueAt);
   const assignee = assigneeLabel(chore.assigneeIds, viewerId, names);
@@ -442,14 +460,14 @@ export function ChoreCard({ chore, completion, viewerId, memberNames: names, isC
     </View>
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={isComplete ? `${chore.title} completed` : `Mark ${chore.title} complete`}
-      accessibilityState={{ disabled: isComplete || isCompleting, busy: isCompleting }}
-      disabled={isComplete || isCompleting}
-      onPress={onComplete}
+      accessibilityLabel={isComplete ? canUndoComplete ? `Undo completion for ${chore.title}` : `${chore.title} completed by ${viewerMemberName(completion!.memberId, viewerId, names)}` : `Mark ${chore.title} complete`}
+      accessibilityState={{ disabled: isCompleting || isUndoing || (isComplete && !canUndoComplete), busy: isCompleting || isUndoing }}
+      disabled={isCompleting || isUndoing || (isComplete && !canUndoComplete)}
+      onPress={canUndoComplete ? onUndoComplete : onComplete}
       style={({ pressed }) => [styles.completeButton, isComplete && styles.completeButtonDone, pressed && styles.pressed]}
     >
-      <Text style={[styles.completeText, isComplete && styles.completeTextDone]}>{isComplete ? `Completed · +${completion?.pointsAwarded} points` : isCompleting ? 'Saving…' : 'Mark complete'}</Text>
-      <Text style={[styles.check, isComplete && styles.checkDone]}>{isComplete ? '✓' : '○'}</Text>
+      <Text style={[styles.completeText, isComplete && styles.completeTextDone]}>{isComplete ? canUndoComplete ? isUndoing ? 'Undoing…' : `Undo complete · remove ${completion?.pointsAwarded} points` : `Completed by ${viewerMemberName(completion!.memberId, viewerId, names)} · +${completion?.pointsAwarded} points` : isCompleting ? 'Saving…' : 'Mark complete'}</Text>
+      <Text style={[styles.check, isComplete && styles.checkDone]}>{isComplete ? canUndoComplete ? '↶' : '✓' : '○'}</Text>
     </Pressable>
   </View>;
 }
