@@ -24,7 +24,15 @@ function currentWeek() {
   };
 }
 
-export function FairnessPanel({ householdId, mode }: { householdId: string; mode: 'balance' | 'pulse' }) {
+function formatWeekStart(weekStart: string) {
+  return new Date(`${weekStart}T00:00:00.000Z`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+export function FairnessPanel({ householdId, memberId, mode }: { householdId: string; memberId: string; mode: 'balance' | 'pulse' }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [chores, setChores] = useState<Chore[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
@@ -34,7 +42,7 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const week = useMemo(currentWeek, []);
+  const week = currentWeek();
 
   useEffect(() => {
     let active = true;
@@ -61,12 +69,23 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
     void refresh();
     const interval = setInterval(() => void refresh(), 3000);
     return () => { active = false; clearInterval(interval); };
-  }, [householdId, week]);
+  }, [householdId, week.from, week.to, week.weekStart]);
 
   const effort = useMemo(() => calculateMemberEffort(members, completions), [members, completions]);
   const status = getFairnessStatus(effort);
   const suggestion = suggestRebalance(effort, chores, completions);
-  const insight = getPulseInsight(responses);
+  const weeklyResponses = useMemo(
+    () => responses.filter((response) => /^\d{4}-\d{2}-\d{2}$/.test(response.weekStart) && response.weekStart === week.weekStart),
+    [responses, week.weekStart],
+  );
+  const insight = getPulseInsight(weeklyResponses);
+  const weeklyRoommateReports = useMemo(() => {
+    const responseByMember = new Map(weeklyResponses.map((response) => [response.memberId, response]));
+    return members
+      .filter((member) => member.id !== memberId)
+      .map((member) => ({ member, response: responseByMember.get(member.id) }))
+      .filter((report): report is { member: Member; response: PulseResponse } => Boolean(report.response));
+  }, [memberId, members, weeklyResponses]);
 
   if (isLoading) return <View style={styles.loading}><ActivityIndicator color={colors.coral} /></View>;
   if (error) return <View style={styles.error}><Text style={styles.body}>{error}</Text></View>;
@@ -118,7 +137,7 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
     <View style={styles.card}>
       <Text style={styles.kicker}>YOUR PRIVATE CHECK-IN</Text>
       <Text style={styles.title}>How did this week feel?</Text>
-      <Text style={styles.help}>Choose 1 for “needs attention” through 5 for “feeling good.”</Text>
+      <Text style={styles.help}>Choose 1 for “needs attention” through 5 for “feeling good.” Your report is visible only inside this household.</Text>
       {(['cleanliness', 'noise', 'communication'] as const).map((category) => <View key={category} style={styles.question}>
         <Text style={styles.questionLabel}>{category === 'noise' ? 'Shared quiet' : category[0].toUpperCase() + category.slice(1)}</Text>
         <View style={styles.ratingRow}>{[1, 2, 3, 4, 5].map((rating) => <Pressable
@@ -134,6 +153,34 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
         <Text style={styles.submitText}>{submitted ? 'Check-in shared ✓' : 'Share my check-in'}</Text>
       </Pressable>
     </View>
+    <View style={styles.card}>
+      <View>
+        <Text style={styles.kicker}>THIS WEEK’S REPORTS</Text>
+        <Text style={styles.title}>How your roommates are feeling</Text>
+        <Text style={styles.help}>Week of {formatWeekStart(week.weekStart)} · Shared within your household to make kind, specific conversations easier.</Text>
+      </View>
+      {weeklyRoommateReports.length === 0 ? <View style={styles.reportsEmpty}>
+        <Text style={styles.reportsEmptyTitle}>No roommate reports yet</Text>
+        <Text style={styles.help}>Reports from other household members will appear here after they check in.</Text>
+      </View> : weeklyRoommateReports.map(({ member, response }) => <View key={response.id} style={styles.report}>
+        <View style={styles.reportHeader}>
+          <View style={[styles.avatar, { backgroundColor: member.avatarColor }]}><Text style={styles.avatarText}>{member.displayName.slice(0, 2).toUpperCase()}</Text></View>
+          <View style={styles.reportHeading}><Text style={styles.name}>{member.displayName}</Text><Text style={styles.reportWeek}>Week of {formatWeekStart(response.weekStart)}</Text></View>
+        </View>
+        <View style={styles.reportScores}>
+          <ReportScore label="Cleanliness" value={response.cleanliness} />
+          <ReportScore label="Shared quiet" value={response.noise} />
+          <ReportScore label="Communication" value={response.communication} />
+        </View>
+      </View>)}
+    </View>
+  </View>;
+}
+
+function ReportScore({ label, value }: { label: string; value: number }) {
+  return <View style={styles.reportScore}>
+    <Text style={styles.reportScoreLabel}>{label}</Text>
+    <Text accessibilityLabel={`${label}, ${value} out of 5`} style={styles.reportScoreValue}>{value}/5</Text>
   </View>;
 }
 
@@ -175,4 +222,14 @@ const styles = StyleSheet.create({
   submit: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.ink, marginTop: 8 },
   submitDone: { backgroundColor: '#2E685B' },
   submitText: { color: colors.paper, fontSize: 14, fontWeight: '900' },
+  reportsEmpty: { padding: spacing.sm, borderRadius: 15, backgroundColor: colors.mintPale },
+  reportsEmptyTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', marginBottom: 3 },
+  report: { gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.line },
+  reportHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reportHeading: { flex: 1 },
+  reportWeek: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  reportScores: { flexDirection: 'row', gap: 7 },
+  reportScore: { flex: 1, minWidth: 0, paddingHorizontal: 8, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.mintPale },
+  reportScoreLabel: { color: colors.muted, fontSize: 9, lineHeight: 12, fontWeight: '800' },
+  reportScoreValue: { color: colors.ink, fontSize: 15, fontWeight: '900', marginTop: 4 },
 });
