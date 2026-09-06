@@ -120,6 +120,27 @@ async function main() {
   assert(award.id === duplicate.id && award.points_awarded === 4, 'Cross-member completion duplicated or awarded the wrong points.');
   const totals = await rest(owner.access_token, `member_point_totals?household_id=eq.${householdId}`);
   assert(Number(totals.find((item) => item.member_id === joined.member.id)?.total_points) === 4, 'Balance point total does not match the saved award.');
+
+  let unauthorizedUndoRejected = false;
+  try {
+    await rpc(owner.access_token, 'undo_chore_completion', { p_chore_id: newChore.id });
+  } catch (error) {
+    unauthorizedUndoRejected = error instanceof Error
+      && error.message.includes('Only the roommate who completed this chore can undo it');
+  }
+  assert(unauthorizedUndoRejected, 'A roommate who did not complete the chore was allowed to undo it.');
+
+  await rpc(guest.access_token, 'undo_chore_completion', { p_chore_id: newChore.id });
+  const boardAfterUndo = await board(guest.access_token);
+  assert(
+    !boardAfterUndo.completions.some((completion) => completion.choreId === newChore.id),
+    'Undo did not move the completed chore back to In progress.',
+  );
+  const totalsAfterUndo = await rest(owner.access_token, `member_point_totals?household_id=eq.${householdId}`);
+  assert(
+    Number(totalsAfterUndo.find((item) => item.member_id === joined.member.id)?.total_points ?? 0) === 0,
+    'Undo did not remove the completing roommate’s awarded points.',
+  );
   const removable = await change(owner.access_token, 'create', { ...input, title: `Remove ${runId}` });
   await vote(guest.access_token, removable.pending.id);
   const toDelete = (await board(owner.access_token)).chores.find((item) => item.title === `Remove ${runId}`);
@@ -262,7 +283,7 @@ async function main() {
     );
   }
 
-  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore workflows, saved totals, seeded demo, pulse, reset, ownership transfer, and household deletion.');
+  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore workflows, completion undo permissions and points, seeded demo, pulse, reset, ownership transfer, and household deletion.');
 }
 
 function mondayUtc() {
