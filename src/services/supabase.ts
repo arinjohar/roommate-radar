@@ -136,6 +136,53 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
         });
         return mapCompletion(row);
       },
+      async getBoard(householdId) {
+        const [choreRows, completionRows] = await Promise.all([
+          request<DbChore[]>(
+            `chores?select=id,household_id,title,points,assignee_id,due_at,recurrence&household_id=eq.${encodeURIComponent(householdId)}&order=due_at.asc`,
+          ),
+          request<DbCompletion[]>(
+            `completions?select=id,chore_id,member_id,points_awarded,completed_at,chores!inner(household_id)&chores.household_id=eq.${encodeURIComponent(householdId)}&order=completed_at.asc`,
+          ),
+        ]);
+        return {
+          chores: choreRows.map(mapChore),
+          completions: completionRows.map(mapCompletion),
+          choreStarters: [],
+          trustLevel: 'everything-except-date' as const,
+          completedRetentionDays: 7,
+          pendingChores: [],
+          pendingTrustChanges: [],
+        };
+      },
+      async requestChore() {
+        throw new Error('Chore requests are not available with the hosted adapter yet.');
+      },
+      async voteOnChore() {
+        throw new Error('Chore approvals are not available with the hosted adapter yet.');
+      },
+      async requestTrustLevelChange() {
+        throw new Error('Trust settings are not available with the hosted adapter yet.');
+      },
+      async voteOnTrustLevelChange() {
+        throw new Error('Trust approvals are not available with the hosted adapter yet.');
+      },
+      async setCompletedRetentionDays() {
+        throw new Error('Chore history settings are not available with the hosted adapter yet.');
+      },
+      async removeChoreStarter() {
+        throw new Error('Saved chore options are not available with the hosted adapter yet.');
+      },
+      async updateChorePoints() {
+        throw new Error('Published chores keep their effort points.');
+      },
+      async completeChore({ choreId, memberId }) {
+        const row = await rpc<DbCompletion>('complete_chore', {
+          p_chore_id: choreId,
+          p_idempotency_key: `${memberId}:${choreId}`,
+        });
+        return mapCompletion(row);
+      },
     },
     pulse: {
       async list(householdId, weekStart) {

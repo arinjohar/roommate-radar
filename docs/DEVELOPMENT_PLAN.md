@@ -133,7 +133,8 @@ Branch: `feature/chore-board`
 - Build the weekly chore list, chore card, completion interaction, and empty state.
 - Seed 8 chores with point values from 1–6.
 - Use the shared `Chore` and `Completion` types.
-- Keep persistence behind `choreService` with an in-memory/mock implementation first.
+- Use the shared `services.chores` contract so the board, balance view, and selected
+  data adapter all read the same chore and completion state.
 
 ### Developer 3 — balance and pulse
 

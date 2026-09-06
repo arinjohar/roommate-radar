@@ -26,6 +26,50 @@ export interface HouseholdMembership {
   member: Member;
 }
 
+export type TrustLevel = 'open' | 'points-and-new' | 'everything-except-date';
+export type Approval = 'pending' | 'approved';
+
+export interface ChoreStarter {
+  title: string;
+  points: number;
+  assigneeIds: string[];
+  recurrence: string;
+  dueInDays: number | null;
+}
+
+export interface PendingChore extends ChoreStarter {
+  id: string;
+  householdId: string;
+  dueAt: string;
+  requestedById: string;
+  approvals: Record<string, Approval>;
+}
+
+export interface PendingTrustChange {
+  id: string;
+  householdId: string;
+  nextTrustLevel: TrustLevel;
+  requestedById: string;
+  approvals: Record<string, Approval>;
+}
+
+export interface ChoreBoardSnapshot {
+  chores: Chore[];
+  completions: Completion[];
+  choreStarters: ChoreStarter[];
+  trustLevel: TrustLevel;
+  completedRetentionDays: number;
+  pendingChores: PendingChore[];
+  pendingTrustChanges: PendingTrustChange[];
+}
+
+export interface ChoreRequest extends ChoreStarter {
+  householdId: string;
+  requestedById: string;
+  dueAt: string;
+  starterTitle: string | null;
+}
+
 export interface HouseholdService {
   create(input: CreateHouseholdInput): Promise<HouseholdMembership>;
   join(input: JoinHouseholdInput): Promise<HouseholdMembership>;
@@ -37,6 +81,39 @@ export interface ChoreService {
   list(householdId: string): Promise<Chore[]>;
   listCompletions(householdId: string, from: string, to: string): Promise<Completion[]>;
   complete(choreId: string, idempotencyKey: string): Promise<Completion>;
+  getBoard(householdId: string): Promise<ChoreBoardSnapshot>;
+  requestChore(input: ChoreRequest): Promise<
+    { status: 'created'; chore: Chore } | { status: 'pending'; pending: PendingChore }
+  >;
+  voteOnChore(input: {
+    householdId: string;
+    pendingId: string;
+    memberId: string;
+    vote: 'approved' | 'rejected';
+  }): Promise<Chore | null>;
+  requestTrustLevelChange(input: {
+    householdId: string;
+    memberId: string;
+    nextTrustLevel: TrustLevel;
+  }): Promise<void>;
+  voteOnTrustLevelChange(input: {
+    householdId: string;
+    pendingId: string;
+    memberId: string;
+    vote: 'approved' | 'rejected';
+  }): Promise<void>;
+  setCompletedRetentionDays(householdId: string, days: number): Promise<void>;
+  removeChoreStarter(householdId: string, title: string): Promise<void>;
+  updateChorePoints(input: {
+    choreId: string;
+    householdId: string;
+    points: number;
+  }): Promise<Chore>;
+  completeChore(input: {
+    choreId: string;
+    householdId: string;
+    memberId: string;
+  }): Promise<Completion>;
 }
 
 export interface PulseService {
