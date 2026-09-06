@@ -11,7 +11,7 @@ The demo loop is deliberately small:
 2. See this week's recurring chores.
 3. Complete a chore and earn its effort points.
 4. See each roommate's actual effort versus an equal expected share.
-5. Submit a three-question house pulse.
+5. Submit a three-question house pulse and review this week’s roommate reports inside the household.
 6. Receive one neutral insight and one suggested swap.
 
 Anything that does not strengthen that loop is out of scope for the two days.
@@ -26,7 +26,7 @@ By the final demo:
 - A new user can create or join a four-person demo household.
 - The chore list loads, a chore can be completed, and the change survives an app restart.
 - The fairness dashboard updates from the saved completions.
-- A user can answer cleanliness, noise, and communication pulse questions.
+- A user can answer cleanliness, noise, and communication pulse questions and view other household members’ reports for the week.
 - The app produces a deterministic, respectful rebalance suggestion.
 - Empty, loading, and recoverable error states exist for the core screens.
 - A rehearsed 90-second demo can be completed even if the network becomes unreliable.
@@ -145,7 +145,7 @@ Landing
 Home
 ├── Chores → Chore detail / complete
 ├── Balance → Weekly effort + suggestion
-├── Pulse → Three ratings → Weekly insight
+├── Pulse → Three ratings → Roommate reports → Weekly insight
 └── Members → Current residence roster, with the active member labeled “(You)”
 ```
 

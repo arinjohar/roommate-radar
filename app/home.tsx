@@ -46,7 +46,7 @@ export default function HomeScreen() {
 function HouseholdPanel({ activeTab, householdId, householdName, memberId }: { activeTab: Tab; householdId: string; householdName: string; memberId: string }) {
   if (activeTab === 'Chores') return <ChoreBoard householdId={householdId} householdName={householdName} memberId={memberId} />;
   if (activeTab === 'Members') return <MembersPanel householdId={householdId} currentMemberId={memberId} />;
-  return <FairnessPanel householdId={householdId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
+  return <FairnessPanel householdId={householdId} memberId={memberId} mode={activeTab === 'Balance' ? 'balance' : 'pulse'} />;
 }
 
 const styles = StyleSheet.create({
