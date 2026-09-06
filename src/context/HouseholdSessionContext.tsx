@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { householdService, type CreateHouseholdInput, type HouseholdSession, type JoinHouseholdInput } from '../services/householdService';
+import type { HouseholdMembership } from '../services/contracts';
 
 type HouseholdSessionContextValue = {
   session: HouseholdSession | null;
   createHousehold: (input: CreateHouseholdInput) => Promise<void>;
   joinHousehold: (input: JoinHouseholdInput) => Promise<void>;
+  memberships: HouseholdMembership[];
+  selectMembership: (membership: HouseholdMembership) => Promise<void>;
   clearSession: () => void;
   leaveHousehold: () => Promise<void>;
   deleteHousehold: () => Promise<void>;
@@ -16,43 +19,60 @@ const HouseholdSessionContext = createContext<HouseholdSessionContextValue | nul
 
 export function HouseholdSessionProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<HouseholdSession | null>(null);
+  const [memberships, setMemberships] = useState<HouseholdMembership[]>([]);
 
   useEffect(() => {
     let active = true;
     householdService.loadSession()
-      .then((saved) => { if (active) setSession(saved); })
-      .catch(() => { if (active) setSession(null); });
+      .then(async (saved) => {
+        if (!active) return;
+        setSession(saved);
+        setMemberships(saved ? await householdService.listMemberships() : []);
+      })
+      .catch(() => { if (active) { setSession(null); setMemberships([]); } });
     return () => { active = false; };
   }, []);
 
   const value = useMemo(() => ({
     session,
+    memberships,
     async createHousehold(input: CreateHouseholdInput) {
-      setSession(await householdService.createHousehold(input));
+      const next = await householdService.createHousehold(input);
+      setSession(next);
+      setMemberships(await householdService.listMemberships());
     },
     async joinHousehold(input: JoinHouseholdInput) {
-      setSession(await householdService.joinHousehold(input));
+      const next = await householdService.joinHousehold(input);
+      setSession(next);
+      setMemberships(await householdService.listMemberships());
+    },
+    async selectMembership(membership: HouseholdMembership) {
+      setSession(await householdService.selectMembership(membership));
     },
     clearSession() {
       setSession(null);
+      setMemberships([]);
       void householdService.clearSession();
     },
     async leaveHousehold() {
       if (!session) return;
-      await householdService.leaveHousehold(session.household.id, session.member.id);
-      setSession(null);
+      const next = await householdService.leaveHousehold(session.household.id, session.member.id);
+      setSession(next);
+      setMemberships(next ? await householdService.listMemberships() : []);
     },
     async deleteHousehold() {
       if (!session) return;
-      await householdService.deleteHousehold(session.household.id, session.member.id);
-      setSession(null);
+      const next = await householdService.deleteHousehold(session.household.id, session.member.id);
+      setSession(next);
+      setMemberships(next ? await householdService.listMemberships() : []);
     },
     async transferOwnershipAndLeave(newOwnerMemberId: string) {
       if (!session) return;
-      await householdService.transferOwnershipAndLeave(session.household.id, session.member.id, newOwnerMemberId);
-      setSession(null);
+      const next = await householdService.transferOwnershipAndLeave(session.household.id, session.member.id, newOwnerMemberId);
+      setSession(next);
+      setMemberships(next ? await householdService.listMemberships() : []);
     },
-  }), [session]);
+  }), [memberships, session]);
 
   return <HouseholdSessionContext.Provider value={value}>{children}</HouseholdSessionContext.Provider>;
 }

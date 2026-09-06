@@ -51,6 +51,23 @@ function defaultBoardSettings(): ChoreBoardSettings {
   };
 }
 
+async function rememberMembership(
+  storage: Storage,
+  membership: { household: { id: string }; member: { id: string } },
+) {
+  const saved = await loadSession(storage);
+  const memberships = [
+    ...(saved?.memberships ?? (saved ? [{ householdId: saved.householdId, memberId: saved.memberId }] : [])),
+    { householdId: membership.household.id, memberId: membership.member.id },
+  ].filter((value, index, values) => values.findIndex((candidate) => candidate.householdId === value.householdId) === index);
+  await storage.setItem(SESSION_KEY, JSON.stringify({
+    guestId: saved?.guestId ?? membership.member.id,
+    householdId: membership.household.id,
+    memberId: membership.member.id,
+    memberships,
+  }));
+}
+
 function recurrenceInterval(recurrence: string) {
   const schedule = parseSchedule(recurrence);
   return schedule.repeatEvery && schedule.repeatUnit ? { count: schedule.repeatEvery, unit: schedule.repeatUnit } : null;
@@ -281,7 +298,7 @@ export function createLocalServices(
         };
         data.households.push(household);
         data.members.push(member);
-        await writeData(data);
+        await Promise.all([writeData(data), rememberMembership(storage, { household, member })]);
         return { household, member };
       },
       async join(input) {
@@ -297,8 +314,21 @@ export function createLocalServices(
           avatarColor: input.avatarColor,
         };
         data.members.push(member);
-        await writeData(data);
+        await Promise.all([writeData(data), rememberMembership(storage, { household, member })]);
         return { household, member };
+      },
+      async listMemberships() {
+        const [data, session] = await Promise.all([readData(), loadSession(storage)]);
+        if (!session) return [];
+        const savedMemberships = session.memberships ?? [{
+          householdId: session.householdId,
+          memberId: session.memberId,
+        }];
+        return savedMemberships.flatMap(({ householdId, memberId }) => {
+          const household = data.households.find((item) => item.id === householdId);
+          const member = data.members.find((item) => item.id === memberId && item.householdId === householdId);
+          return household && member ? [{ household, member }] : [];
+        });
       },
       async get(householdId) {
         return (await readData()).households.find((item) => item.id === householdId) ?? null;

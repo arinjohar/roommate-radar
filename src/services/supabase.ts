@@ -113,6 +113,33 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
         });
         return mapMembership(value);
       },
+      async listMemberships() {
+        const rows = await rpc<Array<{
+          household_id: string;
+          household_name: string;
+          invite_code: string;
+          creator_member_id: string;
+          household_created_at: string;
+          member_id: string;
+          display_name: string;
+          avatar_color: string;
+        }>>('list_my_household_memberships', {});
+        return rows.map((row) => ({
+          household: {
+            id: row.household_id,
+            name: row.household_name,
+            inviteCode: row.invite_code,
+            creatorMemberId: row.creator_member_id,
+            createdAt: row.household_created_at,
+          },
+          member: {
+            id: row.member_id,
+            householdId: row.household_id,
+            displayName: row.display_name,
+            avatarColor: row.avatar_color,
+          },
+        }));
+      },
       async get(householdId) {
         const rows = await request<DbHousehold[]>(
           `households?select=id,name,invite_code,creator_member_id,created_at&id=eq.${encodeURIComponent(householdId)}`,

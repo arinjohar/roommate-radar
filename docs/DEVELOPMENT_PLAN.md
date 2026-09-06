@@ -41,6 +41,8 @@ By the final demo:
   call a database SDK directly.
 - Use React Context plus hooks for session and household state. Do not add a large
   state library during the hackathon.
+- Persist the active household and the complete membership set, so one person can
+  create or join multiple households without making earlier household data unreachable.
 
 ### Backend
 
@@ -125,6 +127,13 @@ For the demo, the engine is transparent and deterministic:
 
 - Balanced: every member is within 20% of `expected`.
 - Needs a nudge: at least one member is more than 20% below `expected`.
+- Fairness Score: when at least two active members have completed effort in the
+  selected week, calculate each member's closeness as
+  `max(0, 1 - abs(gap(m)) / expected)`, average those values, multiply by 100,
+  and round to the nearest integer. A score of 100 means every member is exactly
+  at the equal expected share; lower scores mean the completed effort is farther
+  from that share. Fewer than two active members or zero total completed points
+  is insufficient data and must not be represented as a numeric score.
 - Suggested swap: choose the lowest-gap member, then assign the smallest upcoming
   chore that reduces their gap without overshooting `expected` by more than the
   largest chore value.

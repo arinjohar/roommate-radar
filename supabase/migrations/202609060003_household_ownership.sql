@@ -149,3 +149,34 @@ revoke all on function public.transfer_household_ownership_and_leave(uuid, uuid)
 grant execute on function public.leave_household(uuid) to authenticated;
 grant execute on function public.delete_household(uuid) to authenticated;
 grant execute on function public.transfer_household_ownership_and_leave(uuid, uuid) to authenticated;
+
+create or replace function public.list_my_household_memberships()
+returns table(
+  household_id uuid,
+  household_name text,
+  invite_code text,
+  creator_member_id uuid,
+  household_created_at timestamptz,
+  member_id uuid,
+  display_name text,
+  avatar_color text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    households.id,
+    households.name,
+    households.invite_code,
+    households.creator_member_id,
+    households.created_at,
+    members.id,
+    members.display_name,
+    members.avatar_color
+  from public.members
+  join public.households on households.id = members.household_id
+  where members.user_id = auth.uid()
+  order by households.created_at asc;
+$$;

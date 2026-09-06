@@ -10,6 +10,9 @@ import {
   View,
 } from 'react-native';
 
+import { RadarMark } from './src/components/RadarMark';
+import { useHouseholdSession } from './src/context/HouseholdSessionContext';
+
 const colors = {
   ink: '#132A2E', muted: '#5B6E70', cream: '#FFF9F0', paper: '#FFFFFF',
   coral: '#F36F56', coralDark: '#D9533C', mint: '#9ED9C5',
@@ -24,6 +27,7 @@ const roommates = [
 
 export default function App() {
   const router = useRouter();
+  const { session } = useHouseholdSession();
   const { width } = useWindowDimensions();
   const isWide = width >= 760;
 
@@ -60,6 +64,21 @@ export default function App() {
               </Text>
 
               <View style={[styles.actions, isWide && styles.actionsWide]}>
+                {session ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Return to ${session.household.name}`}
+                    onPress={() => router.push('/home')}
+                    style={({ pressed }) => [styles.returnButton, pressed && styles.buttonPressed]}
+                  >
+                    <View style={styles.returnButtonCopy}>
+                      <Text style={styles.returnButtonLabel}>YOUR HOUSEHOLD</Text>
+                      <Text numberOfLines={1} style={styles.returnButtonName}>{session.household.name}</Text>
+                    </View>
+                    <Text style={styles.returnButtonText}>Return to household</Text>
+                    <Text style={styles.returnButtonArrow}>→</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Create a household"
@@ -140,16 +159,6 @@ export default function App() {
   );
 }
 
-function RadarMark({ size }: { size: number }) {
-  return (
-    <View accessible={false} style={[styles.radarMark, { height: size, width: size, borderRadius: size / 2 }]}>
-      <View style={[styles.radarRing, { height: size * 0.58, width: size * 0.58 }]} />
-      <View style={styles.radarNeedle} />
-      <View style={styles.radarCenter} />
-    </View>
-  );
-}
-
 function Promise({ label }: { label: string }) {
   return (
     <View style={styles.promise}>
@@ -168,10 +177,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   brandName: { color: colors.ink, fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
-  radarMark: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.ink },
-  radarRing: { borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.52)' },
-  radarNeedle: { position: 'absolute', left: '50%', bottom: '50%', width: 2, height: '38%', backgroundColor: colors.mint, transform: [{ rotate: '42deg' }], transformOrigin: 'bottom' },
-  radarCenter: { position: 'absolute', width: 5, height: 5, borderRadius: 3, backgroundColor: colors.paper },
   betaPill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, borderWidth: 1, borderColor: colors.line, backgroundColor: 'rgba(255,255,255,0.7)' },
   betaDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.coral },
   betaText: { color: colors.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.1 },
@@ -187,6 +192,12 @@ const styles = StyleSheet.create({
   subtitle: { maxWidth: 540, marginTop: 22, color: colors.muted, fontSize: 17, lineHeight: 26 },
   actions: { marginTop: 32, gap: 12 },
   actionsWide: { flexDirection: 'row' },
+  returnButton: { minHeight: 66, paddingHorizontal: 17, borderRadius: 15, backgroundColor: colors.mintPale, borderWidth: 1.5, borderColor: colors.mint, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  returnButtonCopy: { flex: 1, minWidth: 0 },
+  returnButtonLabel: { color: colors.muted, fontSize: 8, fontWeight: '900', letterSpacing: 1.1 },
+  returnButtonName: { color: colors.ink, fontSize: 15, fontWeight: '900', marginTop: 3 },
+  returnButtonText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  returnButtonArrow: { color: colors.coralDark, fontSize: 20, fontWeight: '900' },
   primaryButton: { minHeight: 54, paddingHorizontal: 21, borderRadius: 15, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.17, shadowRadius: 13, elevation: 4 },
   primaryButtonText: { color: colors.paper, fontSize: 15, fontWeight: '800' },
   buttonArrow: { color: colors.mint, fontSize: 21, lineHeight: 21 },

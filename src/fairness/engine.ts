@@ -46,6 +46,17 @@ export function getFairnessStatus(effort: MemberEffort[]): FairnessStatus {
     : 'needs-nudge';
 }
 
+export function calculateFairnessScore(effort: MemberEffort[]): number | null {
+  if (effort.length < 2 || effort[0].expected <= 0) return null;
+
+  const totalCloseness = effort.reduce((sum, member) => {
+    const distanceFromShare = Math.abs(member.gap) / member.expected;
+    return sum + Math.max(0, 1 - distanceFromShare);
+  }, 0);
+
+  return Math.round((totalCloseness / effort.length) * 100);
+}
+
 export function suggestRebalance(
   effort: MemberEffort[],
   chores: Chore[],

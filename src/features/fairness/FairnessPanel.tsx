@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
+  calculateFairnessScore,
   calculateMemberEffort,
   getFairnessStatus,
   getPulseInsight,
@@ -72,6 +73,7 @@ export function FairnessPanel({ householdId, memberId, mode }: { householdId: st
   }, [householdId, week.from, week.to, week.weekStart]);
 
   const effort = useMemo(() => calculateMemberEffort(members, completions), [members, completions]);
+  const fairnessScore = useMemo(() => calculateFairnessScore(effort), [effort]);
   const status = getFairnessStatus(effort);
   const suggestion = suggestRebalance(effort, chores, completions);
   const weeklyResponses = useMemo(
@@ -93,8 +95,29 @@ export function FairnessPanel({ householdId, memberId, mode }: { householdId: st
   if (mode === 'balance') {
     return <View style={styles.stack}>
       <View style={styles.heading}>
-        <View><Text style={styles.kicker}>THIS WEEK’S EFFORT</Text><Text style={styles.title}>Everyone’s share, at a glance</Text></View>
-        <View style={styles.status}><Text style={styles.statusText}>{status === 'balanced' ? 'In balance' : 'Needs a nudge'}</Text></View>
+        <View style={styles.headingCopy}><Text style={styles.kicker}>THIS WEEK’S EFFORT</Text><Text style={styles.title}>Everyone’s share, at a glance</Text></View>
+        <View
+          accessibilityLabel={fairnessScore === null
+            ? 'Fairness Score, waiting for data'
+            : `Fairness Score, ${fairnessScore} out of 100, ${status === 'balanced' ? 'in balance' : 'needs a nudge'}`}
+          style={styles.status}
+        >
+          <Text style={styles.statusScore}>{fairnessScore === null ? 'FAIRNESS SCORE' : `FAIRNESS ${fairnessScore}/100`}</Text>
+          <Text style={styles.statusText}>{fairnessScore === null ? 'Waiting for data' : status === 'balanced' ? 'In balance' : 'Needs a nudge'}</Text>
+        </View>
+      </View>
+      <View style={styles.scoreCard}>
+        <View style={styles.scoreCopy}>
+          <Text style={styles.kicker}>FAIRNESS SCORE</Text>
+          <Text style={styles.scoreTitle}>How closely this week matches an equal share</Text>
+          <Text style={styles.help}>{fairnessScore === null
+            ? 'Complete at least one chore in a household with two or more roommates to calculate a score.'
+            : 'A score of 100 means everyone completed exactly their equal share of effort points this week.'}</Text>
+        </View>
+        {fairnessScore === null ? <View style={styles.scoreEmpty}><Text style={styles.scoreEmptyText}>—</Text></View> : <View accessibilityLabel={`Fairness Score, ${fairnessScore} out of 100`} style={styles.scoreValue}>
+          <Text style={styles.scoreNumber}>{fairnessScore}</Text>
+          <Text style={styles.scoreOutOf}>/100</Text>
+        </View>}
       </View>
       <View style={styles.card}>
         {effort.length === 0 ? <Text style={styles.body}>Invite a roommate to start seeing the household balance.</Text> : effort.map((member) => {
@@ -189,10 +212,20 @@ const styles = StyleSheet.create({
   loading: { minHeight: 180, alignItems: 'center', justifyContent: 'center' },
   error: { marginTop: spacing.md, padding: spacing.md, borderRadius: 18, backgroundColor: '#FFF0E8' },
   heading: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm },
+  headingCopy: { flex: 1, minWidth: 0 },
   kicker: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1, marginBottom: 5 },
   title: { color: colors.ink, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  status: { backgroundColor: '#FFF0E8', borderRadius: 999, paddingHorizontal: 9, paddingVertical: 6 },
+  status: { flexShrink: 0, alignItems: 'center', backgroundColor: '#FFF0E8', borderRadius: 15, paddingHorizontal: 9, paddingVertical: 6 },
+  statusScore: { color: colors.coralDark, fontSize: 7, fontWeight: '900', letterSpacing: 0.5 },
   statusText: { color: colors.coralDark, fontSize: 9, fontWeight: '900' },
+  scoreCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: 22, backgroundColor: colors.mintPale, borderWidth: 1, borderColor: '#CFE9DF' },
+  scoreCopy: { flex: 1, minWidth: 0 },
+  scoreTitle: { color: colors.ink, fontSize: 15, lineHeight: 20, fontWeight: '900', marginBottom: 5 },
+  scoreValue: { width: 82, height: 82, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
+  scoreNumber: { color: colors.paper, fontSize: 30, lineHeight: 33, fontWeight: '900', letterSpacing: -1 },
+  scoreOutOf: { color: colors.mint, fontSize: 10, fontWeight: '800' },
+  scoreEmpty: { width: 82, height: 82, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line },
+  scoreEmptyText: { color: colors.muted, fontSize: 28, fontWeight: '800' },
   card: { padding: spacing.md, gap: spacing.sm, borderRadius: 22, backgroundColor: colors.paper, borderWidth: 1, borderColor: '#EEF1EE' },
   effortRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
