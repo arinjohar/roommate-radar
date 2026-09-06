@@ -85,3 +85,38 @@ test('board completions and Balance totals share durable local storage', async (
   assert.deepEqual(await restored.chores.listMemberPoints(household.id), [{ memberId: member.id, totalPoints: 4 }]);
   assert.equal((await restored.chores.listCompletions(household.id, '2020-01-01', '2100-01-01')).length, 1);
 });
+
+test('household creation records one creator and owners must transfer before leaving', async () => {
+  const storage = createMemoryStorage();
+  const services = createLocalServices(storage);
+  const creator = await services.households.create({ householdName: 'Cedar House', displayName: 'Pat', avatarColor: '#F36F56' });
+  const roommate = await services.households.join({ inviteCode: creator.household.inviteCode, displayName: 'Lee', avatarColor: '#9ED9C5' });
+
+  assert.equal(creator.household.creatorMemberId, creator.member.id);
+  await assert.rejects(
+    services.households.leave(creator.household.id, creator.member.id),
+    /Transfer ownership or delete/,
+  );
+  await assert.rejects(
+    services.households.transferOwnershipAndLeave(creator.household.id, creator.member.id, 'not-a-member'),
+    /Choose one other current household member/,
+  );
+
+  await services.households.transferOwnershipAndLeave(creator.household.id, creator.member.id, roommate.member.id);
+  assert.equal((await services.households.get(creator.household.id))?.creatorMemberId, roommate.member.id);
+  assert.deepEqual((await services.households.listMembers(creator.household.id)).map((member) => member.id), [roommate.member.id]);
+});
+
+test('only the creator can delete a household', async () => {
+  const services = createLocalServices(createMemoryStorage());
+  const creator = await services.households.create({ householdName: 'Birch House', displayName: 'Ari', avatarColor: '#F36F56' });
+  const roommate = await services.households.join({ inviteCode: creator.household.inviteCode, displayName: 'Jo', avatarColor: '#9ED9C5' });
+
+  await assert.rejects(
+    services.households.delete(creator.household.id, roommate.member.id),
+    /Only the household creator/,
+  );
+  await services.households.delete(creator.household.id, creator.member.id);
+  assert.equal(await services.households.get(creator.household.id), null);
+  assert.deepEqual(await services.households.listMembers(creator.household.id), []);
+});

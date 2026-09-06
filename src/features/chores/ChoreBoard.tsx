@@ -19,6 +19,7 @@ import {
   type PendingTrustChange,
   type TrustLevel,
 } from '../../services';
+import { filterRecentCompletions } from './completedHistory';
 
 const colors = {
   ink: '#132A2E', muted: '#5B6E70', cream: '#FFF9F0', paper: '#FFFFFF',
@@ -122,8 +123,7 @@ export function ChoreBoard({
   const matchingStarters = !editing && showSuggestions && newTitle.trim()
     ? choreStarters.filter((starter) => starter.title.toLowerCase().includes(newTitle.trim().toLowerCase()))
     : [];
-  const completionCutoff = Date.now() - completedRetentionDays * 24 * 60 * 60 * 1000;
-  const recentCompletions = completions.filter((completion) => Date.parse(completion.completedAt) >= completionCutoff);
+  const recentCompletions = filterRecentCompletions(completions, completedRetentionDays);
   const activeChores = chores.filter((chore) => !chore.archivedAt && !completions.some((completion) => completion.choreId === chore.id));
   const completedChores = chores.filter((chore) => recentCompletions.some((completion) => completion.choreId === chore.id));
   const filteredCompletedChores = completedByFilter === 'all'

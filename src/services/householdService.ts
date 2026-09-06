@@ -61,4 +61,19 @@ export const householdService = {
   },
 
   clearSession: () => services.session.clear(),
+
+  async leaveHousehold(householdId: string, memberId: string) {
+    await services.households.leave(householdId, memberId);
+    await services.session.clear();
+  },
+
+  async deleteHousehold(householdId: string, memberId: string) {
+    await services.households.delete(householdId, memberId);
+    await services.session.clear();
+  },
+
+  async transferOwnershipAndLeave(householdId: string, memberId: string, newOwnerMemberId: string) {
+    await services.households.transferOwnershipAndLeave(householdId, memberId, newOwnerMemberId);
+    await services.session.clear();
+  },
 };

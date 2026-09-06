@@ -113,6 +113,12 @@ export function createLocalServices(
     if (serialized) {
       const saved = JSON.parse(serialized) as DemoData;
       saved.completionRequestIds ??= {};
+      saved.households = saved.households.map((household) => ({
+        ...household,
+        creatorMemberId: household.creatorMemberId
+          || saved.members.find((member) => member.householdId === household.id)?.id
+          || '',
+      }));
       saved.chores = saved.chores.map((chore) => {
         const legacy = chore as typeof chore & { assigneeId?: string | null };
         if (Array.isArray(chore.assigneeIds)) return chore;
@@ -258,14 +264,17 @@ export function createLocalServices(
     households: {
       async create(input) {
         const data = await readData();
+        const householdId = makeId();
+        const memberId = makeId();
         const household = {
-          id: makeId(),
+          id: householdId,
           name: input.householdName.trim(),
           inviteCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
+          creatorMemberId: memberId,
           createdAt: new Date().toISOString(),
         };
         const member = {
-          id: makeId(),
+          id: memberId,
           householdId: household.id,
           displayName: input.displayName.trim(),
           avatarColor: input.avatarColor,
@@ -296,6 +305,60 @@ export function createLocalServices(
       },
       async listMembers(householdId) {
         return (await readData()).members.filter((item) => item.householdId === householdId);
+      },
+      async leave(householdId, memberId) {
+        const data = await readData();
+        const household = data.households.find((item) => item.id === householdId);
+        if (!household || !data.members.some((item) => item.id === memberId && item.householdId === householdId)) {
+          throw new Error('Household membership not found.');
+        }
+        if (household.creatorMemberId === memberId) {
+          throw new Error('Transfer ownership or delete the household before leaving.');
+        }
+        data.members = data.members.filter((item) => item.id !== memberId);
+        data.pulseResponses = data.pulseResponses.filter((item) => item.memberId !== memberId);
+        data.completions = data.completions.filter((item) => item.memberId !== memberId);
+        data.chores = data.chores.map((chore) => chore.householdId === householdId
+          ? { ...chore, assigneeIds: chore.assigneeIds.filter((id) => id !== memberId) }
+          : chore);
+        await writeData(data);
+      },
+      async delete(householdId, memberId) {
+        const data = await readData();
+        const household = data.households.find((item) => item.id === householdId);
+        if (!household || household.creatorMemberId !== memberId) {
+          throw new Error('Only the household creator can delete this household.');
+        }
+        const choreIds = new Set(data.chores.filter((item) => item.householdId === householdId).map((item) => item.id));
+        data.households = data.households.filter((item) => item.id !== householdId);
+        data.members = data.members.filter((item) => item.householdId !== householdId);
+        data.chores = data.chores.filter((item) => item.householdId !== householdId);
+        data.completions = data.completions.filter((item) => !choreIds.has(item.choreId));
+        data.pulseResponses = data.pulseResponses.filter((item) => item.householdId !== householdId);
+        const boardState = await readBoardState();
+        delete boardState.households[householdId];
+        await Promise.all([
+          writeData(data),
+          storage.setItem(CHORE_BOARD_KEY, JSON.stringify(boardState)),
+        ]);
+      },
+      async transferOwnershipAndLeave(householdId, memberId, newOwnerMemberId) {
+        const data = await readData();
+        const household = data.households.find((item) => item.id === householdId);
+        if (!household || household.creatorMemberId !== memberId) {
+          throw new Error('Only the household creator can transfer ownership.');
+        }
+        if (newOwnerMemberId === memberId || !data.members.some((item) => item.id === newOwnerMemberId && item.householdId === householdId)) {
+          throw new Error('Choose one other current household member.');
+        }
+        household.creatorMemberId = newOwnerMemberId;
+        data.members = data.members.filter((item) => item.id !== memberId);
+        data.pulseResponses = data.pulseResponses.filter((item) => item.memberId !== memberId);
+        data.completions = data.completions.filter((item) => item.memberId !== memberId);
+        data.chores = data.chores.map((chore) => chore.householdId === householdId
+          ? { ...chore, assigneeIds: chore.assigneeIds.filter((id) => id !== memberId) }
+          : chore);
+        await writeData(data);
       },
     },
     chores: {

@@ -8,6 +8,7 @@ export interface Household {
   id: string;
   name: string;
   inviteCode: string;
+  creatorMemberId: string;
   createdAt: ISODateTimeString;
 }
 

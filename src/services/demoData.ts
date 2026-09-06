@@ -16,6 +16,7 @@ const household: Household = {
   id: DEMO_HOUSEHOLD_ID,
   name: 'Shared Home',
   inviteCode: DEMO_INVITE_CODE,
+  creatorMemberId: '20000000-0000-4000-8000-000000000001',
   createdAt: '2026-09-01T16:00:00.000Z',
 };
 

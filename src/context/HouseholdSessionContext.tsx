@@ -7,6 +7,9 @@ type HouseholdSessionContextValue = {
   createHousehold: (input: CreateHouseholdInput) => Promise<void>;
   joinHousehold: (input: JoinHouseholdInput) => Promise<void>;
   clearSession: () => void;
+  leaveHousehold: () => Promise<void>;
+  deleteHousehold: () => Promise<void>;
+  transferOwnershipAndLeave: (newOwnerMemberId: string) => Promise<void>;
 };
 
 const HouseholdSessionContext = createContext<HouseholdSessionContextValue | null>(null);
@@ -33,6 +36,21 @@ export function HouseholdSessionProvider({ children }: PropsWithChildren) {
     clearSession() {
       setSession(null);
       void householdService.clearSession();
+    },
+    async leaveHousehold() {
+      if (!session) return;
+      await householdService.leaveHousehold(session.household.id, session.member.id);
+      setSession(null);
+    },
+    async deleteHousehold() {
+      if (!session) return;
+      await householdService.deleteHousehold(session.household.id, session.member.id);
+      setSession(null);
+    },
+    async transferOwnershipAndLeave(newOwnerMemberId: string) {
+      if (!session) return;
+      await householdService.transferOwnershipAndLeave(session.household.id, session.member.id, newOwnerMemberId);
+      setSession(null);
     },
   }), [session]);
 
