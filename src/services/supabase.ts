@@ -249,7 +249,7 @@ function mapChore(row: DbChore): Chore {
     householdId: row.household_id,
     title: row.title,
     points: row.points,
-    assigneeId: row.assignee_id,
+    assigneeIds: row.assignee_id ? [row.assignee_id] : [],
     dueAt: row.due_at,
     recurrence: row.recurrence,
   };

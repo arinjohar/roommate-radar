@@ -22,9 +22,10 @@ export type Chore = {
   householdId: string;
   title: string;
   points: number;
-  assigneeId: string | null;
+  assigneeIds: string[];
   dueAt: string;
   recurrence: string;
+  dueIntervalDays?: number | null;
   isPreApproved?: boolean;
   seriesId?: string;
 };

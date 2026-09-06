@@ -55,7 +55,7 @@ Required tables:
 | --- | --- |
 | `households` | `id`, `name`, `invite_code`, `created_at` |
 | `members` | `id`, `household_id`, `display_name`, `avatar_color` |
-| `chores` | `id`, `household_id`, `title`, `points`, `assignee_id`, `due_at`, `recurrence` |
+| `chores` | `id`, `household_id`, `title`, `points`, `due_at`, `recurrence`, plus assignments through member IDs |
 | `completions` | `id`, `chore_id`, `member_id`, `points_awarded`, `completed_at` |
 | `pulse_responses` | `id`, `household_id`, `member_id`, `week_start`, `cleanliness`, `noise`, `communication` |
 
@@ -66,8 +66,10 @@ contract. The app defaults to a persistent AsyncStorage adapter; Supabase is
 selected only through `src/services/index.ts` after environment and auth setup.
 
 Create one `src/types/domain.ts` file from this contract before parallel feature
-work starts. IDs are strings, dates cross boundaries as ISO 8601 strings, and
-scores are integers. Changes to shared types require a small, early pull request.
+work starts. IDs are strings, dates cross boundaries as ISO 8601 strings, chore
+assignments cross the client boundary as `assigneeIds: string[]` (never encoded
+strings), and scores are integers. Changes to shared types require a small, early
+pull request.
 
 ### Fairness engine
 

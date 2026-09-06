@@ -14,8 +14,8 @@ const completions: Completion[] = [
   { id: 'two', choreId: 'done-too', memberId: 'b', pointsAwarded: 2, completedAt: '2026-09-01T10:00:00.000Z' },
 ];
 const chores: Chore[] = [
-  { id: 'large', householdId: 'house', title: 'Bathroom', points: 6, assigneeId: 'a', dueAt: '2026-09-06T18:00:00.000Z', recurrence: 'weekly' },
-  { id: 'small', householdId: 'house', title: 'Recycling', points: 2, assigneeId: 'a', dueAt: '2026-09-05T18:00:00.000Z', recurrence: 'weekly' },
+  { id: 'large', householdId: 'house', title: 'Bathroom', points: 6, assigneeIds: ['a'], dueAt: '2026-09-06T18:00:00.000Z', recurrence: 'weekly' },
+  { id: 'small', householdId: 'house', title: 'Recycling', points: 2, assigneeIds: ['a'], dueAt: '2026-09-05T18:00:00.000Z', recurrence: 'weekly' },
 ];
 
 const effort = calculateMemberEffort(members, completions);

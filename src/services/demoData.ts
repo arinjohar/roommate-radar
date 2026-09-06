@@ -47,7 +47,7 @@ const chores: Chore[] = choreRows.map(([id, title, points, memberNumber, dueAt])
   householdId: DEMO_HOUSEHOLD_ID,
   title,
   points,
-  assigneeId: members[memberNumber - 1].id,
+  assigneeIds: [members[memberNumber - 1].id],
   dueAt,
   recurrence: 'weekly',
 }));
