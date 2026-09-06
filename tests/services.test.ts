@@ -72,3 +72,16 @@ test('pulse submissions update the current member response', async () => {
   assert.equal(responses.length, 1);
   assert.equal(responses[0].cleanliness, 4);
 });
+
+test('board completions and Balance totals share durable local storage', async () => {
+  const storage = createMemoryStorage();
+  const services = createLocalServices(storage);
+  const { household, member } = await services.households.create({ householdName: 'New home', displayName: 'Pat', avatarColor: '#F36F56' });
+  const created = await services.chores.requestChore({ householdId: household.id, requestedById: member.id, title: 'Tidy', points: 4, assigneeIds: [member.id], recurrence: 'one time', dueAt: '', dueInDays: null, starterTitle: null });
+  assert.equal(created.status, 'created');
+  if (created.status !== 'created') return;
+  await services.chores.completeChore({ householdId: household.id, choreId: created.chore.id, memberId: member.id });
+  const restored = createLocalServices(storage);
+  assert.deepEqual(await restored.chores.listMemberPoints(household.id), [{ memberId: member.id, totalPoints: 4 }]);
+  assert.equal((await restored.chores.listCompletions(household.id, '2020-01-01', '2100-01-01')).length, 1);
+});

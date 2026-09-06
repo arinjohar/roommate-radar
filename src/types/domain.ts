@@ -2,6 +2,7 @@
 export type ISODateString = string;
 export type ISODateTimeString = string;
 export type ChoreRecurrence = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly';
+export type RepeatUnit = 'days' | 'weeks' | 'months';
 
 export interface Household {
   id: string;
@@ -28,6 +29,11 @@ export type Chore = {
   dueIntervalDays?: number | null;
   isPreApproved?: boolean;
   seriesId?: string;
+  repeatEvery?: number | null;
+  repeatUnit?: RepeatUnit | null;
+  scheduledAt?: string;
+  archivedAt?: string | null;
+  version?: number;
 };
 
 export type Completion = {

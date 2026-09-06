@@ -71,7 +71,47 @@ assignments cross the client boundary as `assigneeIds: string[]` (never encoded
 strings), and scores are integers. Changes to shared types require a small, early
 pull request.
 
-### Fairness engine
+### Shared chore workflows (September 6 update)
+
+The configured `services.chores` API exposes board workflows alongside the
+existing reads and completions. Local mode uses the unified data store and board
+settings from the service cleanup; hosted mode uses authenticated Supabase RPCs.
+Screens obtain this service through `src/services/index.ts`. The former standalone
+`choreService.ts` remains removed.
+
+- New chore writes accept 1–10 effort points, multiple household member IDs,
+  an optional ISO due date, and structured `repeatEvery`/`repeatUnit` values.
+  Legacy recurrence strings remain a compatibility/display field. Repeating
+  chores require a due date; the UI anchors newly selected dates at 18:00 UTC.
+- `chore_assignees` stores assignments; no rows means Everyone. Existing
+  single-assignee values are backfilled by the migration.
+- `chore_series` retains future settings. Editing one occurrence preserves the
+  series template and schedule anchor; changing recurrence requires choosing
+  This and future. The next occurrence is generated on a board read once the
+  preceding occurrence is completed or skipped and its next scheduled date is
+  reached. At most one unfinished occurrence exists per series. There is no
+  background scheduler or realtime dependency.
+- Delete archives active chores. Completed chores and their awarded points are
+  immutable through these workflows. Deleting This and future stops the series;
+  deleting one occurrence skips it. History-window settings hide older completed
+  cards without deleting the stored awards.
+- `chore_board_settings` and `chore_requests` persist trust levels, saved options,
+  proposed edits/deletions and votes. Open applies changes immediately; Points &
+  new chores reviews new templates and point changes; Review changes reviews
+  edits/deletions and changed templates. Relaxing trust needs all current members;
+  stricter trust applies immediately. All policy checks run in database RPCs,
+  including for the owner. Concurrent edits use versions and household locking.
+- Completion is awarded once per occurrence, even across two members/devices.
+  `completions.points_awarded` is the durable ledger; the RLS-protected
+  `member_point_totals` view computes each member's overall total from it. Balance
+  displays overall earned points alongside the existing weekly calculation.
+
+Deploy migration `202609060001_shared_chore_workflows.sql` before enabling the
+new hosted client. See [CHORE_BACKEND.md](CHORE_BACKEND.md) for verification and
+deployment steps. This changes shared service contracts and database permissions;
+it adds no production dependencies.
+
+### Fairness calculation
 
 For member `m` in the selected week:
 

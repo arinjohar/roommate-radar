@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { parseSchedule, type ChoreScope } from '../../services/choreSchedule';
 import type { Chore, Completion } from '../../types/domain';
 import {
   services,
@@ -83,6 +84,12 @@ export function ChoreBoard({
   service = services.chores,
 }: ChoreBoardProps) {
   const [chores, setChores] = useState<Chore[]>([]);
+  const scroll = useRef<ScrollView>(null);
+  const [editing, setEditing] = useState<Chore | null>(null);
+  const [deleting, setDeleting] = useState<Chore | null>(null);
+  const [scope, setScope] = useState<ChoreScope>('occurrence');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,12 +119,12 @@ export function ChoreBoard({
   const [householdMemberIds, setHouseholdMemberIds] = useState<string[]>([]);
   const [householdMemberNames, setHouseholdMemberNames] = useState<Record<string, string>>({});
   const [completedByFilter, setCompletedByFilter] = useState<string>('all');
-  const matchingStarters = showSuggestions && newTitle.trim()
+  const matchingStarters = !editing && showSuggestions && newTitle.trim()
     ? choreStarters.filter((starter) => starter.title.toLowerCase().includes(newTitle.trim().toLowerCase()))
     : [];
   const completionCutoff = Date.now() - completedRetentionDays * 24 * 60 * 60 * 1000;
   const recentCompletions = completions.filter((completion) => Date.parse(completion.completedAt) >= completionCutoff);
-  const activeChores = chores.filter((chore) => !completions.some((completion) => completion.choreId === chore.id));
+  const activeChores = chores.filter((chore) => !chore.archivedAt && !completions.some((completion) => completion.choreId === chore.id));
   const completedChores = chores.filter((chore) => recentCompletions.some((completion) => completion.choreId === chore.id));
   const filteredCompletedChores = completedByFilter === 'all'
     ? completedChores
@@ -200,14 +207,15 @@ export function ChoreBoard({
   };
 
   const addChore = async () => {
+    if (isAdding) return;
     setIsAdding(true);
     setError(null);
     try {
       const recurrence = isRecurring ? `every ${recurrenceEvery} ${recurrenceEvery === 1 ? recurrenceUnit.slice(0, -1) : recurrenceUnit}` : 'one time';
       const normalizedAssigneeIds = normalizeAssignees(assigneeIds, householdMemberIds);
       if (!newTitle.trim()) throw new Error('Give this chore a short, clear name.');
-      const dueAt = dueDate ? `${dueDate}T18:00:00.000Z` : '';
-      await service.requestChore({
+      const dueAt = editing && dueDate === editing.dueAt.slice(0, 10) ? editing.dueAt : dueDate ? `${dueDate}T18:00:00.000Z` : '';
+      const input = {
         householdId,
         requestedById: memberId,
         title: newTitle,
@@ -217,8 +225,14 @@ export function ChoreBoard({
         dueInDays: dueInDaysFromDate(dueAt),
         recurrence,
         starterTitle: selectedStarter?.title ?? null,
-      });
-      applySnapshot(await service.getBoard(householdId));
+      };
+      if (editing) await service.requestEdit({ ...input, choreId: editing.id, expectedVersion: editing.version ?? 1, scope });
+      else await service.requestChore(input);
+      const snapshot = await service.getBoard(householdId);
+      applySnapshot(snapshot);
+      const isPending = snapshot.pendingChores.some((item) => editing ? item.choreId === editing.id : item.title === newTitle.trim());
+      setNotice(isPending ? 'Sent to Pending for household approval.' : editing ? 'Chore updated.' : 'Chore added.');
+      setEditing(null);
       setNewTitle('');
       setSelectedStarter(null);
       setNewPoints(2);
@@ -232,6 +246,31 @@ export function ChoreBoard({
     } finally {
       setIsAdding(false);
     }
+  };
+
+  const startEdit = (chore: Chore) => {
+    setEditing(chore); setDeleting(null); setScope('occurrence'); setSelectedStarter(null);
+    setNewTitle(chore.title); setNewPoints(chore.points); setAssigneeIds(chore.assigneeIds.length ? chore.assigneeIds : ['everyone']);
+    setDueDate(chore.dueAt.slice(0, 10));
+    const schedule = parseSchedule(chore.recurrence);
+    setIsRecurring(Boolean(schedule.repeatEvery)); setRecurrenceEvery(schedule.repeatEvery ?? 1); setRecurrenceUnit(schedule.repeatUnit ?? 'weeks');
+    setIsDetailsOpen(true); setShowSuggestions(false); setNotice(null);
+    scroll.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const runAction = async (action: () => Promise<unknown>) => {
+    if (actionBusy) return;
+    setActionBusy(true); setError(null);
+    try { await action(); } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save that change. Please try again.'); }
+    finally { setActionBusy(false); }
+  };
+
+  const archive = async () => {
+    if (!deleting) return;
+    await service.requestArchive({ householdId, choreId: deleting.id, requestedById: memberId, scope, expectedVersion: deleting.version ?? 1 });
+    const snapshot = await service.getBoard(householdId);
+    applySnapshot(snapshot); setDeleting(null);
+    setNotice(snapshot.pendingChores.some((item) => item.choreId === deleting.id) ? 'Deletion sent to Pending for household approval.' : 'Chore deleted. Earned points stay in history.');
   };
 
   const voteOnPending = async (pending: PendingChore, vote: 'approved' | 'rejected') => {
@@ -289,9 +328,10 @@ export function ChoreBoard({
       <View style={styles.settingsHeader}><Pressable accessibilityRole="button" accessibilityLabel="Back to chore board" onPress={() => setIsSettingsOpen(false)} style={styles.backButton}><Text style={styles.backButtonText}>‹ Back</Text></Pressable><Text style={styles.eyebrow}>CHORE BOARD</Text></View>
       <Text style={styles.title}>Settings</Text>
       <Text style={styles.subtitle}>Tidy up the shared chore options your household can reuse.</Text>
+      {error ? <Text accessibilityLiveRegion="polite" style={styles.errorText}>{error}</Text> : null}
       <View style={styles.settingsSection}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${isSavedOptionsOpen ? 'Hide' : 'Show'} saved chore options`} accessibilityState={{ expanded: isSavedOptionsOpen }} onPress={() => setIsSavedOptionsOpen((open) => !open)} style={styles.settingsDropdown}><Text style={styles.settingsSectionTitle}>Saved chore options</Text><Text style={styles.settingsChevron}>{isSavedOptionsOpen ? '⌃' : '⌄'}</Text></Pressable>
-        {isSavedOptionsOpen ? <><Text style={styles.settingsSectionHint}>Removing an option does not affect chores already on the board.</Text>{choreStarters.map((starter) => <View key={starter.title} style={styles.settingsOption}><View style={styles.copy}><Text style={styles.settingsOptionTitle}>{starter.title}</Text><Text style={styles.meta}>{starter.points} pts · {assigneeLabel(starter.assigneeIds, memberId, householdMemberNames)}{recurrenceLabel(starter.recurrence) ? ` · ${recurrenceLabel(starter.recurrence)}` : ''}{dueIntervalLabel(starter.dueInDays) ? ` · ${dueIntervalLabel(starter.dueInDays)}` : ''}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Remove saved option ${starter.title}`} onPress={() => void removeStarter(starter.title)} style={styles.settingsRemove}><Text style={styles.settingsRemoveText}>Remove</Text></Pressable></View>)}</> : null}
+        {isSavedOptionsOpen ? <><Text style={styles.settingsSectionHint}>Removing an option does not affect chores already on the board.</Text>{choreStarters.map((starter) => <View key={starter.title} style={styles.settingsOption}><View style={styles.copy}><Text style={styles.settingsOptionTitle}>{starter.title}</Text><Text style={styles.meta}>{starter.points} pts · {assigneeLabel(starter.assigneeIds, memberId, householdMemberNames)}{recurrenceLabel(starter.recurrence) ? ` · ${recurrenceLabel(starter.recurrence)}` : ''}{dueIntervalLabel(starter.dueInDays) ? ` · ${dueIntervalLabel(starter.dueInDays)}` : ''}</Text></View><Pressable accessibilityRole="button" accessibilityLabel={`Remove saved option ${starter.title}`} onPress={() => void runAction(() => removeStarter(starter.title))} style={styles.settingsRemove}><Text style={styles.settingsRemoveText}>Remove</Text></Pressable></View>)}</> : null}
       </View>
       <View style={styles.settingsSection}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${isTrustLevelOpen ? 'Hide' : 'Show'} trust level`} accessibilityState={{ expanded: isTrustLevelOpen }} onPress={() => setIsTrustLevelOpen((open) => !open)} style={styles.settingsDropdown}><Text style={styles.settingsSectionTitle}>Trust level</Text><Text style={styles.settingsChevron}>{isTrustLevelOpen ? '⌃' : '⌄'}</Text></Pressable>
@@ -299,12 +339,12 @@ export function ChoreBoard({
           const isCurrent = trustLevel === level.id;
           const isPending = pendingTrustChanges.some((change) => change.nextTrustLevel === level.id);
           const hasPendingTrustChange = pendingTrustChanges.length > 0;
-          return <Pressable key={level.id} accessibilityRole="radio" accessibilityState={{ checked: isCurrent, disabled: hasPendingTrustChange && !isCurrent }} disabled={hasPendingTrustChange || isCurrent} onPress={() => void requestTrustLevelChange(level.id)} style={[styles.trustChoice, isCurrent && styles.trustChoiceSelected, isPending && styles.trustChoicePending, hasPendingTrustChange && !isPending && !isCurrent && styles.trustChoiceUnavailable]}><View style={styles.copy}><Text style={[styles.trustChoiceTitle, isCurrent && styles.trustChoiceTitleSelected]}>{level.label}</Text><Text style={[styles.trustChoiceDescription, isCurrent && styles.trustChoiceDescriptionSelected]}>{level.description}</Text>{isPending ? <Text style={styles.pendingTrustOption}>Pending approval</Text> : null}</View><View style={[styles.radioMark, isCurrent && styles.radioMarkSelected, isPending && styles.radioMarkPending]}>{isCurrent || isPending ? <View style={[styles.radioDot, isPending && styles.radioDotPending]} /> : null}</View></Pressable>;
+          return <Pressable key={level.id} accessibilityRole="radio" accessibilityState={{ checked: isCurrent, disabled: hasPendingTrustChange && !isCurrent }} disabled={hasPendingTrustChange || isCurrent} onPress={() => void runAction(() => requestTrustLevelChange(level.id))} style={[styles.trustChoice, isCurrent && styles.trustChoiceSelected, isPending && styles.trustChoicePending, hasPendingTrustChange && !isPending && !isCurrent && styles.trustChoiceUnavailable]}><View style={styles.copy}><Text style={[styles.trustChoiceTitle, isCurrent && styles.trustChoiceTitleSelected]}>{level.label}</Text><Text style={[styles.trustChoiceDescription, isCurrent && styles.trustChoiceDescriptionSelected]}>{level.description}</Text>{isPending ? <Text style={styles.pendingTrustOption}>Pending approval</Text> : null}</View><View style={[styles.radioMark, isCurrent && styles.radioMarkSelected, isPending && styles.radioMarkPending]}>{isCurrent || isPending ? <View style={[styles.radioDot, isPending && styles.radioDotPending]} /> : null}</View></Pressable>;
         })}</View></> : null}
       </View>
       <View style={styles.settingsSection}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${isCompletedHistoryOpen ? 'Hide' : 'Show'} completed chore history`} accessibilityState={{ expanded: isCompletedHistoryOpen }} onPress={() => setIsCompletedHistoryOpen((open) => !open)} style={styles.settingsDropdown}><Text style={styles.settingsSectionTitle}>Completed chore history</Text><Text style={styles.settingsChevron}>{isCompletedHistoryOpen ? '⌃' : '⌄'}</Text></Pressable>
-        {isCompletedHistoryOpen ? <><Text style={styles.settingsSectionHint}>Completed chores disappear after the selected amount of time.</Text><View style={styles.retentionChoices}>{completedRetentionOptions.map((option) => <FilterButton key={option.days} label={option.label} selected={completedRetentionDays === option.days} onPress={() => void updateCompletedRetention(option.days)} />)}</View></> : null}
+        {isCompletedHistoryOpen ? <><Text style={styles.settingsSectionHint}>Completed chores disappear after the selected amount of time.</Text><View style={styles.retentionChoices}>{completedRetentionOptions.map((option) => <FilterButton key={option.days} label={option.label} selected={completedRetentionDays === option.days} onPress={() => void runAction(() => updateCompletedRetention(option.days))} />)}</View></> : null}
       </View>
     </ScrollView></View>;
   }
@@ -317,7 +357,7 @@ export function ChoreBoard({
         <Text style={styles.subtitle}>Mark a task when it’s done so the household picture stays kind and clear.</Text>
 
         <View style={styles.addPanel}>
-          <Text style={styles.addTitle}>Add or edit chores</Text>
+          <Text style={styles.addTitle}>{editing ? 'Edit chore' : 'Add a chore'}</Text>
           <Text style={styles.addHint}>Start typing to pick a common task, or make one that fits your home.</Text>
           <TextInput
             accessibilityLabel="Chore name"
@@ -330,7 +370,7 @@ export function ChoreBoard({
           />
           {matchingStarters.length > 0 ? <View style={styles.starterList}>{matchingStarters.map((starter) => <View key={starter.title} style={styles.starterOption}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Autofill ${starter.title}, ${starter.points} points`} onPress={() => chooseStarter(starter)} style={styles.starterSelect}><Text style={styles.starterOptionText}>{starter.title}</Text><Text style={styles.starterPoints}>{starter.points} pts</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Delete saved option ${starter.title}`} onPress={() => void removeStarter(starter.title)} style={styles.starterDelete}><Text style={styles.starterDeleteText}>×</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Delete saved option ${starter.title}`} onPress={() => void runAction(() => removeStarter(starter.title))} style={styles.starterDelete}><Text style={styles.starterDeleteText}>×</Text></Pressable>
           </View>)}</View> : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Show chore details" onPress={() => setIsDetailsOpen((open) => !open)} style={styles.detailsToggle}><Text style={styles.detailsToggleText}>Add details</Text><Text style={styles.detailsChevron}>{isDetailsOpen ? '⌃' : '⌄'}</Text></Pressable>
           {isDetailsOpen ? <View>
@@ -343,11 +383,14 @@ export function ChoreBoard({
             <View style={styles.assignmentChoices}><FilterButton label="One time" selected={!isRecurring} onPress={() => setIsRecurring(false)} /><FilterButton label="Repeats" selected={isRecurring} onPress={() => setIsRecurring(true)} /></View>
             {isRecurring ? <View style={styles.recurrenceRow}><Text style={styles.repeatLabel}>Every</Text><View style={styles.stepper}><Pressable accessibilityRole="button" accessibilityLabel="Decrease repeat interval" disabled={recurrenceEvery === 1} onPress={() => setRecurrenceEvery((value) => Math.max(1, value - 1))} style={[styles.stepButton, recurrenceEvery === 1 && styles.stepButtonDisabled]}><Text style={styles.stepText}>−</Text></Pressable><Text style={styles.stepValue}>{recurrenceEvery}</Text><Pressable accessibilityRole="button" accessibilityLabel="Increase repeat interval" onPress={() => setRecurrenceEvery((value) => value + 1)} style={styles.stepButton}><Text style={styles.stepText}>+</Text></Pressable></View><View style={styles.unitChoices}>{(['days', 'weeks', 'months'] as const).map((unit) => <FilterButton key={unit} label={unit} selected={recurrenceUnit === unit} onPress={() => setRecurrenceUnit(unit)} />)}</View></View> : null}
           </View> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel="Add new chore" disabled={isAdding} onPress={() => void addChore()} style={({ pressed }) => [styles.addButton, isAdding && styles.addButtonDisabled, pressed && styles.pressed]}>
-            <Text style={styles.addButtonText}>{isAdding ? 'Adding…' : 'Add chore'}</Text>
+          {editing ? <><ScopeChoices scope={scope} onChange={setScope} /><Pressable accessibilityRole="button" onPress={() => { setEditing(null); setNewTitle(''); setNewPoints(2); setDueDate(''); setIsRecurring(false); }}><Text style={styles.retry}>Cancel edit</Text></Pressable></> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={editing ? 'Save chore changes' : 'Add new chore'} disabled={isAdding} onPress={() => void addChore()} style={({ pressed }) => [styles.addButton, isAdding && styles.addButtonDisabled, pressed && styles.pressed]}>
+            <Text style={styles.addButtonText}>{isAdding ? 'Saving…' : editing ? 'Save changes' : 'Add chore'}</Text>
           </Pressable>
         </View>
 
+        {notice ? <Text accessibilityLiveRegion="polite" style={styles.addHint}>{notice}</Text> : null}
+        {deleting ? <View style={styles.addPanel}><Text style={styles.addTitle}>Delete “{deleting.title}”?</Text><Text style={styles.addHint}>Completed work and earned points stay in history.</Text><ScopeChoices scope={scope} onChange={setScope} /><View style={styles.voteRow}><Pressable accessibilityRole="button" disabled={actionBusy} style={styles.rejectButton} onPress={() => void runAction(archive)}><Text style={styles.rejectText}>{actionBusy ? 'Saving…' : 'Confirm delete'}</Text></Pressable><Pressable accessibilityRole="button" style={styles.approveButton} onPress={() => setDeleting(null)}><Text style={styles.approveText}>Cancel</Text></Pressable></View></View> : null}
         <View style={styles.listToggle}>
           <FilterButton label={`In progress · ${activeChores.length}`} selected={visibleList === 'active'} onPress={() => setVisibleList('active')} />
           <FilterButton label={`Pending · ${pendingCount}`} selected={visibleList === 'pending'} onPress={() => setVisibleList('pending')} />
@@ -359,10 +402,10 @@ export function ChoreBoard({
         {!isLoading && !error && chores.length === 0 ? <EmptyState /> : null}
         {!isLoading && visibleList === 'active' && activeChores.length > 0 ? <View style={styles.list}>{activeChores.map((chore) => {
           const completion = completions.find((item) => item.choreId === chore.id);
-          return <ChoreCard key={chore.id} chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={completingId === chore.id} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => void complete(chore)} onChangePoints={(points) => void updatePoints(chore, points)} />;
+          return <View key={chore.id}><ChoreCard chore={chore} completion={completion} viewerId={memberId} memberNames={householdMemberNames} isCompleting={completingId === chore.id} isUpdatingPoints={updatingPointId === chore.id} onComplete={() => void complete(chore)} onChangePoints={(points) => void updatePoints(chore, points)} /><View style={styles.voteRow}><Pressable accessibilityRole="button" accessibilityLabel={`Edit ${chore.title}`} onPress={() => startEdit(chore)} style={styles.approveButton}><Text style={styles.approveText}>Edit</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel={`Delete ${chore.title}`} onPress={() => { setDeleting(chore); setScope('occurrence'); scroll.current?.scrollTo({ y: 0, animated: true }); }} style={styles.rejectButton}><Text style={styles.rejectText}>Delete</Text></Pressable></View></View>;
         })}</View> : null}
         {!isLoading && visibleList === 'active' && chores.length > 0 && activeChores.length === 0 ? <View style={styles.activeEmpty}><Text style={styles.activeEmptyTitle}>You did it — all caught up! ✦</Text><Text style={styles.activeEmptyText}>The shared work is wrapped up. Take a breath, and visit Completed to celebrate the week’s progress.</Text></View> : null}
-        {!isLoading && visibleList === 'pending' ? <View style={styles.list}>{pendingCount === 0 ? <Text style={styles.emptyFilterText}>No chore requests are waiting for approval.</Text> : <>{pendingChores.map((pending) => <PendingCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void voteOnPending(pending, vote)} />)}{pendingTrustChanges.map((pending) => <PendingTrustCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void voteOnPendingTrustChange(pending, vote)} />)}</>}</View> : null}
+        {!isLoading && visibleList === 'pending' ? <View style={styles.list}>{pendingCount === 0 ? <Text style={styles.emptyFilterText}>No chore requests are waiting for approval.</Text> : <>{pendingChores.map((pending) => <PendingCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void runAction(() => voteOnPending(pending, vote))} />)}{pendingTrustChanges.map((pending) => <PendingTrustCard key={pending.id} pending={pending} memberId={memberId} memberIds={householdMemberIds} memberNames={householdMemberNames} onVote={(vote) => void runAction(() => voteOnPendingTrustChange(pending, vote))} />)}</>}</View> : null}
         {!isLoading && visibleList === 'completed' ? <View style={styles.completedContent}>
           <Text style={styles.filterLabel}>Completed by</Text>
           <View style={styles.filters}>
@@ -408,6 +451,10 @@ export function ChoreCard({ chore, completion, viewerId, memberNames: names, isC
   </View>;
 }
 
+function ScopeChoices({ scope, onChange }: { scope: ChoreScope; onChange: (scope: ChoreScope) => void }) {
+  return <View style={styles.recurrenceRow}><Text style={styles.pointLabel}>Apply to</Text><View style={styles.assignmentChoices}><FilterButton label="This occurrence" selected={scope === 'occurrence'} onPress={() => onChange('occurrence')} /><FilterButton label="This and future" selected={scope === 'future'} onPress={() => onChange('future')} /></View></View>;
+}
+
 function EmptyState() {
   return <View style={styles.empty}><View style={styles.emptyIcon}><Text style={styles.emptyCheck}>✓</Text></View><Text style={styles.emptyTitle}>All clear for now</Text><Text style={styles.emptyText}>There are no chores for this week. Enjoy the extra breathing room.</Text></View>;
 }
@@ -417,7 +464,7 @@ function FilterButton({ label, selected, onPress }: { label: string; selected: b
 }
 
 function recurrenceLabel(recurrence: string) {
-  if (recurrence === 'one time') return null;
+  if (recurrence === 'one time' || recurrence === 'once') return null;
   return recurrence === 'weekly' ? 'repeats weekly' : `repeats ${recurrence}`;
 }
 
@@ -434,14 +481,14 @@ function PendingCard({ pending, memberId, memberIds, memberNames: names, onVote 
   const repeats = recurrenceLabel(pending.recurrence);
   const due = pending.dueAt ? new Date(pending.dueAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : null;
   const isOverdue = isPastDue(pending.dueAt);
-  return <View style={styles.card}><View style={styles.cardTop}><View style={styles.copy}><Text style={styles.choreTitle}>{pending.title}</Text><Text style={styles.meta}>For {assigneeLabel(pending.assigneeIds, memberId, names)} · {pending.points} pts{due ? isOverdue ? <Text style={styles.overdue}> · overdue · was due {due}</Text> : ` · due ${due}` : ''}{repeats ? ` · ${repeats}` : ''}</Text></View><View style={styles.lockedPoints}><Text style={styles.lockedPointsText}>{approvals}/{otherMemberIds.length} yes</Text></View></View><Text style={styles.addedBy}>Added by {viewerMemberName(pending.requestedById, memberId, names)}</Text><Text style={styles.approvalStatus}>{otherMemberIds.map((id) => `${viewerMemberName(id, memberId, names)}: ${pending.approvals[id] === 'approved' ? 'accepted' : 'waiting'}`).join(' · ')}</Text><View style={styles.voteRow}><Pressable accessibilityRole="button" disabled={pending.approvals[memberId] === 'approved'} onPress={() => onVote('approved')} style={[styles.approveButton, pending.approvals[memberId] === 'approved' && styles.stepButtonDisabled]}><Text style={styles.approveText}>Approve</Text></Pressable><Pressable accessibilityRole="button" onPress={() => onVote('rejected')} style={styles.rejectButton}><Text style={styles.rejectText}>Reject</Text></Pressable></View></View>;
+  return <View style={styles.card}><View style={styles.cardTop}><View style={styles.copy}><Text style={styles.choreTitle}>{pending.action === 'archive' ? 'Delete: ' : pending.action === 'edit' ? 'Edit: ' : ''}{pending.title}</Text><Text style={styles.meta}>For {assigneeLabel(pending.assigneeIds, memberId, names)} · {pending.points} pts{due ? isOverdue ? <Text style={styles.overdue}> · overdue · was due {due}</Text> : ` · due ${due}` : ''}{repeats ? ` · ${repeats}` : ''}</Text></View><View style={styles.lockedPoints}><Text style={styles.lockedPointsText}>{approvals}/{otherMemberIds.length} yes</Text></View></View>{'scope' in pending ? <Text style={styles.meta}>Applies to {pending.scope === 'future' ? 'this and future occurrences' : 'this occurrence'}</Text> : null}<Text style={styles.addedBy}>Requested by {viewerMemberName(pending.requestedById, memberId, names)}</Text><Text style={styles.approvalStatus}>{otherMemberIds.map((id) => `${viewerMemberName(id, memberId, names)}: ${pending.approvals[id] === 'approved' ? 'accepted' : 'waiting'}`).join(' · ')}</Text><View style={styles.voteRow}><Pressable accessibilityRole="button" disabled={pending.approvals[memberId] === 'approved'} onPress={() => onVote('approved')} style={[styles.approveButton, pending.approvals[memberId] === 'approved' && styles.stepButtonDisabled]}><Text style={styles.approveText}>Approve</Text></Pressable><Pressable accessibilityRole="button" onPress={() => onVote('rejected')} style={styles.rejectButton}><Text style={styles.rejectText}>Reject</Text></Pressable></View></View>;
 }
 
 function PendingTrustCard({ pending, memberId, memberIds, memberNames: names, onVote }: { pending: PendingTrustChange; memberId: string; memberIds: string[]; memberNames: Record<string, string>; onVote: (vote: 'approved' | 'rejected') => void }) {
   const otherMemberIds = memberIds.filter((id) => id !== pending.requestedById);
   const approvals = otherMemberIds.filter((id) => pending.approvals[id] === 'approved').length;
   const requestedLevel = trustLevels.find((level) => level.id === pending.nextTrustLevel);
-  return <View style={[styles.card, styles.pendingTrustCard]}><View style={styles.cardTop}><View style={styles.copy}><View style={styles.pendingTrustTitleRow}><Text style={styles.choreTitle}>Change trust level</Text><View pointerEvents="none" style={styles.pendingTrustGear}><Text style={styles.pendingTrustGearGlyph}>⚙</Text><View style={styles.pendingTrustGearCenter} /></View></View><Text style={styles.meta}>Requested: {requestedLevel?.label}</Text></View><View style={styles.lockedPoints}><Text style={styles.lockedPointsText}>{approvals}/{otherMemberIds.length} yes</Text></View></View><Text style={styles.addedBy}>Added by {viewerMemberName(pending.requestedById, memberId, names)}</Text><Text style={styles.approvalStatus}>{otherMemberIds.map((id) => `${viewerMemberName(id, memberId, names)}: ${pending.approvals[id] === 'approved' ? 'accepted' : 'waiting'}`).join(' · ')}</Text><View style={styles.voteRow}><Pressable accessibilityRole="button" disabled={pending.approvals[memberId] === 'approved'} onPress={() => onVote('approved')} style={[styles.approveButton, pending.approvals[memberId] === 'approved' && styles.stepButtonDisabled]}><Text style={styles.approveText}>Approve</Text></Pressable><Pressable accessibilityRole="button" onPress={() => onVote('rejected')} style={styles.rejectButton}><Text style={styles.rejectText}>Reject</Text></Pressable></View></View>;
+  return <View style={[styles.card, styles.pendingTrustCard]}><View style={styles.cardTop}><View style={styles.copy}><View style={styles.pendingTrustTitleRow}><Text style={styles.choreTitle}>Change trust level</Text><View pointerEvents="none" style={styles.pendingTrustGear}><Text style={styles.pendingTrustGearGlyph}>⚙</Text><View style={styles.pendingTrustGearCenter} /></View></View><Text style={styles.meta}>Requested: {requestedLevel?.label}</Text></View><View style={styles.lockedPoints}><Text style={styles.lockedPointsText}>{approvals}/{otherMemberIds.length} yes</Text></View></View>{'scope' in pending ? <Text style={styles.meta}>Applies to {pending.scope === 'future' ? 'this and future occurrences' : 'this occurrence'}</Text> : null}<Text style={styles.addedBy}>Requested by {viewerMemberName(pending.requestedById, memberId, names)}</Text><Text style={styles.approvalStatus}>{otherMemberIds.map((id) => `${viewerMemberName(id, memberId, names)}: ${pending.approvals[id] === 'approved' ? 'accepted' : 'waiting'}`).join(' · ')}</Text><View style={styles.voteRow}><Pressable accessibilityRole="button" disabled={pending.approvals[memberId] === 'approved'} onPress={() => onVote('approved')} style={[styles.approveButton, pending.approvals[memberId] === 'approved' && styles.stepButtonDisabled]}><Text style={styles.approveText}>Approve</Text></Pressable><Pressable accessibilityRole="button" onPress={() => onVote('rejected')} style={styles.rejectButton}><Text style={styles.rejectText}>Reject</Text></Pressable></View></View>;
 }
 
 const styles = StyleSheet.create({

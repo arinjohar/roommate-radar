@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { nextDueDate } from '../src/services/choreSchedule';
 
 import type { RoommateRadarServices } from '../src/services/contracts';
 import { createDemoData, DEMO_HOUSEHOLD_ID } from '../src/services/demoData';
@@ -159,4 +160,55 @@ test('a newly created household uses its real roster and can approve its own fir
   });
   assert.equal(result.status, 'created');
   assert.equal((await service.getBoard(householdId)).chores.some((chore) => chore.title === 'Clean pantry shelves'), true);
+});
+
+test('edits require approval, reject stale versions, and archive preserves awarded points', async () => {
+  const service = createLocalServices(createMemoryStorage(), { now: () => new Date('2026-09-05T12:00:00Z') }).chores;
+  const input = { householdId: DEMO_HOUSEHOLD_ID, requestedById: DEMO_MEMBER_ID, title: 'New chore', points: 3, assigneeIds: [DEMO_MEMBER_ID], dueAt: '', dueInDays: null, recurrence: 'one time', starterTitle: null };
+  const created = await service.requestChore(input);
+  assert.equal(created.status, 'pending');
+  if (created.status !== 'pending') return;
+  await approveRequest(service, created.pending.id);
+  const chore = (await service.getBoard(DEMO_HOUSEHOLD_ID)).chores.find((item) => item.title === input.title)!;
+  await service.requestEdit({ ...input, title: 'Edited chore', points: 5, choreId: chore.id, scope: 'future', expectedVersion: 1 });
+  let board = await service.getBoard(DEMO_HOUSEHOLD_ID);
+  assert.equal(board.chores.find((item) => item.id === chore.id)?.title, 'New chore');
+  await approveRequest(service, board.pendingChores[0].id);
+  board = await service.getBoard(DEMO_HOUSEHOLD_ID);
+  assert.equal(board.chores.find((item) => item.id === chore.id)?.points, 5);
+  await assert.rejects(service.requestEdit({ ...input, choreId: chore.id, scope: 'occurrence', expectedVersion: 1 }), /changed/);
+  const first = await service.completeChore({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, memberId: DEMO_MEMBER_ID });
+  const second = await service.completeChore({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, memberId: DEMO_HOUSEHOLD_MEMBER_IDS[0] });
+  assert.deepEqual(first, second);
+  assert.equal(first.pointsAwarded, 5);
+  await assert.rejects(service.requestArchive({ householdId: DEMO_HOUSEHOLD_ID, choreId: chore.id, requestedById: DEMO_MEMBER_ID, scope: 'future', expectedVersion: 2 }), /history/);
+  assert.equal((await service.getBoard(DEMO_HOUSEHOLD_ID)).completions.filter((item) => item.choreId === chore.id).length, 1);
+});
+
+test('an occurrence edit leaves future settings intact and stopping a series prevents recurrence', async () => {
+  let time = new Date('2026-09-05T12:00:00Z');
+  const services = createLocalServices(createMemoryStorage(), { now: () => time });
+  const { household, member } = await services.households.create({ householdName: 'Solo', displayName: 'Solo member', avatarColor: '#F36F56' });
+  const service = services.chores;
+  const householdId = household.id; const memberId = member.id;
+  const input = { householdId, requestedById: memberId, title: 'Daily tidy', points: 2, assigneeIds: [memberId], dueAt: '2026-09-05T18:00:00Z', dueInDays: 0, recurrence: 'every 1 day', starterTitle: null };
+  const result = await service.requestChore(input);
+  assert.equal(result.status, 'created');
+  if (result.status !== 'created') return;
+  await service.requestEdit({ ...input, title: 'Today only', points: 4, dueAt: '2026-09-07T18:00:00Z', choreId: result.chore.id, scope: 'occurrence', expectedVersion: 1 });
+  await service.completeChore({ householdId, memberId, choreId: result.chore.id });
+  time = new Date('2026-09-06T19:00:00Z');
+  let board = await service.getBoard(householdId);
+  const next = board.chores.find((item) => item.seriesId === result.chore.id && item.id !== result.chore.id)!;
+  assert.equal(next.title, 'Daily tidy'); assert.equal(next.points, 2);
+  assert.equal(next.dueAt, '2026-09-06T18:00:00.000Z');
+  await service.requestArchive({ householdId, requestedById: memberId, choreId: next.id, scope: 'future', expectedVersion: 1 });
+  time = new Date('2026-10-01T19:00:00Z');
+  board = await service.getBoard(householdId);
+  assert.equal(board.chores.filter((item) => item.seriesId === result.chore.id).length, 2);
+  assert.equal(board.completions.find((item) => item.choreId === result.chore.id)?.pointsAwarded, 4);
+});
+
+test('monthly recurrence clamps at month end', () => {
+  assert.equal(nextDueDate('2028-01-31T18:00:00Z', 1, 'months'), '2028-02-29T18:00:00.000Z');
 });

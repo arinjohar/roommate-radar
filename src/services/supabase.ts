@@ -1,12 +1,13 @@
 import type {
   Chore,
-  ChoreRecurrence,
   Completion,
   Household,
   Member,
   PulseResponse,
 } from '../types/domain';
 import type { HouseholdMembership, RoommateRadarServices } from './contracts';
+import type { ChoreBoardSnapshot, ChoreService } from './contracts';
+import { parseSchedule } from './choreSchedule';
 
 interface SupabaseOptions {
   url: string;
@@ -27,16 +28,6 @@ interface DbMember {
   household_id: string;
   display_name: string;
   avatar_color: string;
-}
-
-interface DbChore {
-  id: string;
-  household_id: string;
-  title: string;
-  points: number;
-  assignee_id: string | null;
-  due_at: string;
-  recurrence: ChoreRecurrence;
 }
 
 interface DbCompletion {
@@ -85,6 +76,24 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
     body: JSON.stringify(body),
   });
 
+  const change = <T>(householdId: string, action: string, payload: object) => rpc<T>('request_chore_change', { p_household_id: householdId, p_action: action, p_payload: payload });
+  const vote = (householdId: string, pendingId: string, choice: string) => rpc<Chore | null>('vote_chore_change', { p_household_id: householdId, p_request_id: pendingId, p_vote: choice });
+  const choreBoard: Omit<ChoreService, 'list' | 'listCompletions' | 'complete' | 'listMemberPoints'> = {
+    getBoard: (householdId) => rpc<ChoreBoardSnapshot>('get_chore_board', { p_household_id: householdId }),
+    requestChore: (input) => change(input.householdId, 'create', { ...input, ...parseSchedule(input.recurrence) }),
+    async requestEdit(input) { await change(input.householdId, 'edit', { ...input, ...parseSchedule(input.recurrence) }); },
+    async requestArchive(input) { await change(input.householdId, 'archive', input); },
+    voteOnChore: (input) => vote(input.householdId, input.pendingId, input.vote),
+    async requestTrustLevelChange(input) { await change(input.householdId, 'trust', input); },
+    async voteOnTrustLevelChange(input) { await vote(input.householdId, input.pendingId, input.vote); },
+    async setCompletedRetentionDays(householdId, days) { await rpc('update_chore_board_settings', { p_household_id: householdId, p_retention: days }); },
+    async removeChoreStarter(householdId, title) { await rpc('update_chore_board_settings', { p_household_id: householdId, p_remove_starter: title }); },
+    async updateChorePoints() { throw new Error('Use Edit to request an effort point change.'); },
+    async completeChore(input) {
+      return mapCompletion(await rpc<DbCompletion>('complete_chore', { p_chore_id: input.choreId, p_idempotency_key: `complete-${input.choreId}` }));
+    },
+  };
+
   return {
     households: {
       async create(input) {
@@ -117,11 +126,13 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
       },
     },
     chores: {
+      ...choreBoard,
+      async listMemberPoints(householdId) {
+        const rows = await request<{ member_id: string; total_points: number }[]>(`member_point_totals?household_id=eq.${encodeURIComponent(householdId)}&select=member_id,total_points`);
+        return rows.map((row) => ({ memberId: row.member_id, totalPoints: Number(row.total_points) }));
+      },
       async list(householdId) {
-        const rows = await request<DbChore[]>(
-          `chores?select=id,household_id,title,points,assignee_id,due_at,recurrence&household_id=eq.${encodeURIComponent(householdId)}&order=due_at.asc`,
-        );
-        return rows.map(mapChore);
+        return (await choreBoard.getBoard(householdId)).chores.filter((chore) => !chore.archivedAt);
       },
       async listCompletions(householdId, from, to) {
         const rows = await request<DbCompletion[]>(
@@ -133,53 +144,6 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
         const row = await rpc<DbCompletion>('complete_chore', {
           p_chore_id: choreId,
           p_idempotency_key: idempotencyKey,
-        });
-        return mapCompletion(row);
-      },
-      async getBoard(householdId) {
-        const [choreRows, completionRows] = await Promise.all([
-          request<DbChore[]>(
-            `chores?select=id,household_id,title,points,assignee_id,due_at,recurrence&household_id=eq.${encodeURIComponent(householdId)}&order=due_at.asc`,
-          ),
-          request<DbCompletion[]>(
-            `completions?select=id,chore_id,member_id,points_awarded,completed_at,chores!inner(household_id)&chores.household_id=eq.${encodeURIComponent(householdId)}&order=completed_at.asc`,
-          ),
-        ]);
-        return {
-          chores: choreRows.map(mapChore),
-          completions: completionRows.map(mapCompletion),
-          choreStarters: [],
-          trustLevel: 'everything-except-date' as const,
-          completedRetentionDays: 7,
-          pendingChores: [],
-          pendingTrustChanges: [],
-        };
-      },
-      async requestChore() {
-        throw new Error('Chore requests are not available with the hosted adapter yet.');
-      },
-      async voteOnChore() {
-        throw new Error('Chore approvals are not available with the hosted adapter yet.');
-      },
-      async requestTrustLevelChange() {
-        throw new Error('Trust settings are not available with the hosted adapter yet.');
-      },
-      async voteOnTrustLevelChange() {
-        throw new Error('Trust approvals are not available with the hosted adapter yet.');
-      },
-      async setCompletedRetentionDays() {
-        throw new Error('Chore history settings are not available with the hosted adapter yet.');
-      },
-      async removeChoreStarter() {
-        throw new Error('Saved chore options are not available with the hosted adapter yet.');
-      },
-      async updateChorePoints() {
-        throw new Error('Published chores keep their effort points.');
-      },
-      async completeChore({ choreId, memberId }) {
-        const row = await rpc<DbCompletion>('complete_chore', {
-          p_chore_id: choreId,
-          p_idempotency_key: `${memberId}:${choreId}`,
         });
         return mapCompletion(row);
       },
@@ -287,18 +251,6 @@ function mapMember(row: DbMember): Member {
     householdId: row.household_id,
     displayName: row.display_name,
     avatarColor: row.avatar_color,
-  };
-}
-
-function mapChore(row: DbChore): Chore {
-  return {
-    id: row.id,
-    householdId: row.household_id,
-    title: row.title,
-    points: row.points,
-    assigneeIds: row.assignee_id ? [row.assignee_id] : [],
-    dueAt: row.due_at,
-    recurrence: row.recurrence,
   };
 }
 

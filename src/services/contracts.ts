@@ -38,6 +38,10 @@ export interface ChoreStarter {
 }
 
 export interface PendingChore extends ChoreStarter {
+  action?: 'create' | 'edit' | 'archive';
+  choreId?: string;
+  scope?: import('./choreSchedule').ChoreScope;
+  expectedVersion?: number;
   id: string;
   householdId: string;
   dueAt: string;
@@ -78,6 +82,9 @@ export interface HouseholdService {
 }
 
 export interface ChoreService {
+  requestEdit(input: ChoreRequest & { choreId: string; scope: import('./choreSchedule').ChoreScope; expectedVersion: number }): Promise<void>;
+  requestArchive(input: { householdId: string; choreId: string; requestedById: string; scope: import('./choreSchedule').ChoreScope; expectedVersion: number }): Promise<void>;
+  listMemberPoints(householdId: string): Promise<{ memberId: string; totalPoints: number }[]>;
   list(householdId: string): Promise<Chore[]>;
   listCompletions(householdId: string, from: string, to: string): Promise<Completion[]>;
   complete(choreId: string, idempotencyKey: string): Promise<Completion>;
