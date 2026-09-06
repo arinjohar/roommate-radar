@@ -2,7 +2,7 @@
 
 Screens import interfaces or the configured `services` object from `src/services`.
 They do not import a database client. The default `local` adapter stores the seeded
-Maple House demo in AsyncStorage, so the core flow remains usable offline and after
+Shared Home fixture in AsyncStorage, so the core flow remains usable offline and after
 an app restart.
 
 ## Configuration boundary
@@ -27,7 +27,7 @@ breaking the local demo.
 
 The migration in `supabase/migrations` creates the five planned tables, indexes,
 constraints, RLS policies, and transactional RPCs. `supabase/seed.sql` creates the
-same four-member, eight-chore Maple House story as the local adapter (`MAPLE4`).
+same four-member, eight-chore Shared Home story as the local adapter (`RADAR4`).
 
 With the Supabase CLI and Docker installed:
 
@@ -44,7 +44,7 @@ npx supabase@latest link --project-ref YOUR_PROJECT_REF
 npx supabase@latest db push --linked --include-seed
 ```
 
-`--include-seed` is required for the hosted `MAPLE4` demo household. In the
+`--include-seed` is required for the hosted `RADAR4` seeded household. In the
 Supabase dashboard, enable **Authentication → Allow anonymous sign-ins** before
 testing. The project must use the same public URL and publishable/anon key in its
 EAS `preview` and `production` environments:
@@ -71,6 +71,6 @@ The access model is intentionally narrow:
 - pulse writes are limited to the acting member and a score range of 1–5;
 - demo reset deletes only the acting user's completions and pulse responses.
 
-Seed identities have no Supabase user attached. Joining `MAPLE4` creates a separate
+Seed identities have no Supabase user attached. Joining `RADAR4` creates a separate
 member linked to the anonymous user, while still allowing that user to see the
 seeded household story.

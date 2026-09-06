@@ -1,5 +1,5 @@
 insert into public.households(id, name, invite_code, created_at)
-values ('10000000-0000-4000-8000-000000000001', 'Maple House', 'MAPLE4', '2026-09-01T16:00:00Z')
+values ('10000000-0000-4000-8000-000000000001', 'Shared Home', 'RADAR4', '2026-09-01T16:00:00Z')
 on conflict (id) do nothing;
 
 insert into public.members(id, household_id, display_name, avatar_color, created_at) values
