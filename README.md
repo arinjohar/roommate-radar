@@ -20,7 +20,9 @@ or Windows PC, or in a web browser.
   release).
 - npm, which is included with Node.js.
 - This repository downloaded or cloned to the computer.
-- [Expo Go](https://expo.dev/go) on each physical phone you want to test.
+- An **SDK 57-compatible** [Expo Go](https://expo.dev/go) build on each phone,
+  or a Roommate Radar preview build. See the compatibility notes below before
+  installing Expo Go from an app store.
 - Internet access on both the computer and phone when using a tunnel.
 
 Verify Node.js and npm before continuing:
@@ -72,33 +74,30 @@ edit it for the data mode described above:
 test -f .env || cp .env.example .env
 ```
 
-Start Expo on the local network:
+For physical-phone testing from a Mac, use this startup command:
 
 ```bash
-npm start
+npm run start:tunnel -- --go --clear
 ```
 
-Expo prints a QR code and a list of keyboard shortcuts in Terminal. Keep this
-Terminal window open while using the app.
+This is the required command for the team's Mac-to-phone setup. It targets Expo
+Go, clears the bundle cache, and uses a tunnel to avoid the local-network timeouts
+seen on some iPhones. Stop any previous Expo server with `Control+C` first.
+Keep this Terminal window open while using the app.
 
 ### Open it on a physical phone from a Mac
 
-1. Install Expo Go on the phone.
-2. Put the Mac and phone on the same Wi-Fi network.
-3. Run `npm start` and wait for the QR code.
+1. Install an SDK 57-compatible Expo Go build on the phone (see compatibility
+   notes below).
+2. Connect both the Mac and phone to the internet; they can use different networks.
+3. Run `npm run start:tunnel -- --go --clear` and wait for both `Tunnel connected`
+   and `Tunnel ready` in Terminal.
 4. On iPhone, scan the QR code with the built-in Camera app and tap the Expo Go
    banner. On Android, open Expo Go and choose **Scan QR code**.
 
-If the phone cannot reach the Mac over Wi-Fi, stop Expo with `Control+C` and use
-the public tunnel instead:
-
-```bash
-npm run start:tunnel
-```
-
-Wait until Terminal displays both `Tunnel connected` and `Tunnel ready`, then scan
-the new QR code. A tunnel is slower than local Wi-Fi but works across different
-networks.
+Scan the newly generated QR code each time you restart the server; an old code
+may point to a server that is no longer running. A tunnel is slower than local
+Wi-Fi and still requires an SDK-compatible Expo Go build.
 
 ### Open the iOS Simulator on a Mac
 
@@ -220,14 +219,34 @@ Roommate Radar app.
 
 ## Common startup problems
 
+- This project uses **Expo SDK 57**. If a phone says the project is incompatible
+  or requires a newer Expo Go, changing `npm start` to `npx expo start` or using
+  a tunnel will not fix the native SDK mismatch. On Android, select SDK 57 at
+  [expo.dev/go](https://expo.dev/go) and install the compatible build. For physical
+  iPhones, Expo's September 2026 guidance says the App Store version stops at SDK
+  54; use an SDK 57 Expo Go build through `eas go` and your TestFlight internal
+  team (Apple Developer membership required), or the project's iOS preview build.
+  Check [Expo's current compatibility instructions](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/)
+  for updated availability. Phones with different Expo Go builds can behave differently.
 - Run commands from the repository directory containing `package.json`.
 - Use `npm ci` after pulling changes to keep dependencies consistent.
+- On an iPhone showing a connectivity timeout, check **Settings → Privacy &
+  Security → Local Network → Expo Go** and allow access for LAN testing.
+  Internet access alone does not mean Expo Go can reach the computer.
+  See [Apple's local network permission guide](https://support.apple.com/en-us/102229).
 - If the QR code opens but cannot load the bundle, confirm the phone and computer
-  are on the same Wi-Fi or switch to `npm run start:tunnel`.
+  are on the same Wi-Fi or stop the old server and run
+  `npm run start:tunnel -- --go --clear`, then scan the newly generated QR code.
+  This targets Expo Go explicitly and uses a fresh bundle cache. A tunnel can
+  help when a shared Wi-Fi network prevents devices from reaching each other;
+  it does not fix an incompatible Expo Go version.
 - If a tunnel times out, stop it and retry. Expo tunnels depend on the external
   ngrok service and can be temporarily unavailable.
 - If the app opens but two phones cannot share a household, confirm the local
-  `.env` uses `EXPO_PUBLIC_DATA_SOURCE=supabase`; local mode is device-specific.
+  `.env` uses `EXPO_PUBLIC_DATA_SOURCE=supabase` and both servers use the same
+  Supabase project; local mode is device-specific. Restart Expo after changing
+  `.env`. The terminal QR code opens the app; use the household's invite code
+  inside Roommate Radar to join the household.
 - If an emulator does not open, start the simulator/emulator manually before
   pressing `i` or `a`.
 - Only one Expo server should use a given port. Stop old sessions with
