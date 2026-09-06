@@ -80,6 +80,9 @@ export interface HouseholdService {
   listMemberships(): Promise<HouseholdMembership[]>;
   get(householdId: string): Promise<Household | null>;
   listMembers(householdId: string): Promise<Member[]>;
+  leave(householdId: string, memberId: string): Promise<void>;
+  delete(householdId: string, memberId: string): Promise<void>;
+  transferOwnershipAndLeave(householdId: string, memberId: string, newOwnerMemberId: string): Promise<void>;
 }
 
 export interface ChoreService {

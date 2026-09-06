@@ -42,6 +42,28 @@ async function membershipsForSavedSession() {
   return [];
 }
 
+async function persistAfterDeparture(departedHouseholdId: string): Promise<HouseholdMembership | null> {
+  const saved = await services.session.load();
+  if (!saved) return null;
+  const memberships = (await services.households.listMemberships())
+    .filter((membership) => membership.household.id !== departedHouseholdId);
+  const next = memberships[0];
+  if (!next) {
+    await services.session.clear();
+    return null;
+  }
+  await services.session.save({
+    ...saved,
+    householdId: next.household.id,
+    memberId: next.member.id,
+    memberships: memberships.map((membership) => ({
+      householdId: membership.household.id,
+      memberId: membership.member.id,
+    })),
+  });
+  return next;
+}
+
 export const householdService = {
   async createHousehold(input: CreateHouseholdInput): Promise<HouseholdSession> {
     const membership = await services.households.create({
@@ -103,4 +125,19 @@ export const householdService = {
   },
 
   clearSession: () => services.session.clear(),
+
+  async leaveHousehold(householdId: string, memberId: string) {
+    await services.households.leave(householdId, memberId);
+    return persistAfterDeparture(householdId);
+  },
+
+  async deleteHousehold(householdId: string, memberId: string) {
+    await services.households.delete(householdId, memberId);
+    return persistAfterDeparture(householdId);
+  },
+
+  async transferOwnershipAndLeave(householdId: string, memberId: string, newOwnerMemberId: string) {
+    await services.households.transferOwnershipAndLeave(householdId, memberId, newOwnerMemberId);
+    return persistAfterDeparture(householdId);
+  },
 };

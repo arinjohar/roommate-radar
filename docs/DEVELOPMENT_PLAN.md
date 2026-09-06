@@ -55,13 +55,13 @@ Required tables:
 
 | Table | Minimum fields |
 | --- | --- |
-| `households` | `id`, `name`, `invite_code`, `created_at` |
+| `households` | `id`, `name`, `invite_code`, `created_by`, `creator_member_id`, `created_at` |
 | `members` | `id`, `household_id`, `display_name`, `avatar_color` |
 | `chores` | `id`, `household_id`, `title`, `points`, `due_at`, `recurrence`, plus assignments through member IDs |
 | `completions` | `id`, `chore_id`, `member_id`, `points_awarded`, `completed_at` |
 | `pulse_responses` | `id`, `household_id`, `member_id`, `week_start`, `cleanliness`, `noise`, `communication` |
 
-The backend adds `households.created_by` and `members.user_id` to bind anonymous
+The backend uses `households.created_by`, `households.creator_member_id`, and `members.user_id` to bind anonymous
 Supabase users to RLS-protected household membership. Completion retry keys and
 table timestamps are persistence details and do not change the client domain
 contract. The app defaults to a persistent AsyncStorage adapter; Supabase is
@@ -155,7 +155,10 @@ Home
 ├── Chores → Chore detail / complete
 ├── Balance → Weekly effort + suggestion
 ├── Pulse → Three ratings → Roommate reports → Weekly insight
-└── Members → Current residence roster, with the active member labeled “(You)”
+├── Members → Current residence roster, with the active member labeled “(You)”
+└── Profile settings
+    ├── Member → Leave household → Landing
+    └── Creator → Delete household or transfer ownership and leave → Landing
 ```
 
 Use a four-tab app after onboarding: **Chores**, **Balance**, **Pulse**, and

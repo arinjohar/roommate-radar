@@ -20,6 +20,7 @@ interface DbHousehold {
   id: string;
   name: string;
   invite_code: string;
+  creator_member_id: string;
   created_at: string;
 }
 
@@ -117,6 +118,7 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
           household_id: string;
           household_name: string;
           invite_code: string;
+          creator_member_id: string;
           household_created_at: string;
           member_id: string;
           display_name: string;
@@ -127,6 +129,7 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
             id: row.household_id,
             name: row.household_name,
             inviteCode: row.invite_code,
+            creatorMemberId: row.creator_member_id,
             createdAt: row.household_created_at,
           },
           member: {
@@ -139,7 +142,7 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
       },
       async get(householdId) {
         const rows = await request<DbHousehold[]>(
-          `households?select=id,name,invite_code,created_at&id=eq.${encodeURIComponent(householdId)}`,
+          `households?select=id,name,invite_code,creator_member_id,created_at&id=eq.${encodeURIComponent(householdId)}`,
         );
         return rows[0] ? mapHousehold(rows[0]) : null;
       },
@@ -148,6 +151,18 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
           `members?select=id,household_id,display_name,avatar_color&household_id=eq.${encodeURIComponent(householdId)}&order=created_at.asc`,
         );
         return rows.map(mapMember);
+      },
+      async leave(householdId) {
+        await rpc('leave_household', { p_household_id: householdId });
+      },
+      async delete(householdId) {
+        await rpc('delete_household', { p_household_id: householdId });
+      },
+      async transferOwnershipAndLeave(householdId, _memberId, newOwnerMemberId) {
+        await rpc('transfer_household_ownership_and_leave', {
+          p_household_id: householdId,
+          p_new_owner_member_id: newOwnerMemberId,
+        });
       },
     },
     chores: {
@@ -267,7 +282,7 @@ function mapMembership(value: { household: DbHousehold; member: DbMember }): Hou
 }
 
 function mapHousehold(row: DbHousehold): Household {
-  return { id: row.id, name: row.name, inviteCode: row.invite_code, createdAt: row.created_at };
+  return { id: row.id, name: row.name, inviteCode: row.invite_code, creatorMemberId: row.creator_member_id, createdAt: row.created_at };
 }
 
 function mapMember(row: DbMember): Member {
