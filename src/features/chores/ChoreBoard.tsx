@@ -19,6 +19,8 @@ import {
   type PendingTrustChange,
   type TrustLevel,
 } from '../../services';
+import { filterRecentCompletions } from './completedHistory';
+import { choreErrorMessage, dueDateToIso } from './choreValidation';
 
 const colors = {
   ink: '#132A2E', muted: '#5B6E70', cream: '#FFF9F0', paper: '#FFFFFF',
@@ -122,8 +124,7 @@ export function ChoreBoard({
   const matchingStarters = !editing && showSuggestions && newTitle.trim()
     ? choreStarters.filter((starter) => starter.title.toLowerCase().includes(newTitle.trim().toLowerCase()))
     : [];
-  const completionCutoff = Date.now() - completedRetentionDays * 24 * 60 * 60 * 1000;
-  const recentCompletions = completions.filter((completion) => Date.parse(completion.completedAt) >= completionCutoff);
+  const recentCompletions = filterRecentCompletions(completions, completedRetentionDays);
   const activeChores = chores.filter((chore) => !chore.archivedAt && !completions.some((completion) => completion.choreId === chore.id));
   const completedChores = chores.filter((chore) => recentCompletions.some((completion) => completion.choreId === chore.id));
   const filteredCompletedChores = completedByFilter === 'all'
@@ -214,7 +215,9 @@ export function ChoreBoard({
       const recurrence = isRecurring ? `every ${recurrenceEvery} ${recurrenceEvery === 1 ? recurrenceUnit.slice(0, -1) : recurrenceUnit}` : 'one time';
       const normalizedAssigneeIds = normalizeAssignees(assigneeIds, householdMemberIds);
       if (!newTitle.trim()) throw new Error('Give this chore a short, clear name.');
-      const dueAt = editing && dueDate === editing.dueAt.slice(0, 10) ? editing.dueAt : dueDate ? `${dueDate}T18:00:00.000Z` : '';
+      const dueAt = editing && dueDate === editing.dueAt.slice(0, 10)
+        ? editing.dueAt
+        : dueDateToIso(dueDate);
       const input = {
         householdId,
         requestedById: memberId,
@@ -242,7 +245,7 @@ export function ChoreBoard({
       setRecurrenceEvery(1);
       setRecurrenceUnit('weeks');
     } catch (creationError) {
-      setError(creationError instanceof Error ? creationError.message : 'Could not add that chore.');
+      setError(choreErrorMessage(creationError, 'Could not add that chore.'));
     } finally {
       setIsAdding(false);
     }

@@ -8,6 +8,7 @@ import type {
 import type { HouseholdMembership, RoommateRadarServices } from './contracts';
 import type { ChoreBoardSnapshot, ChoreService } from './contracts';
 import { initialRecurringDueDate, parseSchedule } from './choreSchedule';
+import { validateDisplayName, validateHouseholdName } from './householdValidation';
 
 interface SupabaseOptions {
   url: string;
@@ -20,6 +21,7 @@ interface DbHousehold {
   id: string;
   name: string;
   invite_code: string;
+  creator_member_id: string;
   created_at: string;
 }
 
@@ -112,24 +114,54 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
   return {
     households: {
       async create(input) {
+        const householdName = validateHouseholdName(input.householdName);
+        const displayName = validateDisplayName(input.displayName);
         const value = await rpc<{ household: DbHousehold; member: DbMember }>('create_household', {
-          p_name: input.householdName,
-          p_display_name: input.displayName,
+          p_name: householdName,
+          p_display_name: displayName,
           p_avatar_color: input.avatarColor,
         });
         return mapMembership(value);
       },
       async join(input) {
+        const displayName = validateDisplayName(input.displayName);
         const value = await rpc<{ household: DbHousehold; member: DbMember }>('join_household', {
           p_invite_code: input.inviteCode,
-          p_display_name: input.displayName,
+          p_display_name: displayName,
           p_avatar_color: input.avatarColor,
         });
         return mapMembership(value);
       },
+      async listMemberships() {
+        const rows = await rpc<Array<{
+          household_id: string;
+          household_name: string;
+          invite_code: string;
+          creator_member_id: string;
+          household_created_at: string;
+          member_id: string;
+          display_name: string;
+          avatar_color: string;
+        }>>('list_my_household_memberships', {});
+        return rows.map((row) => ({
+          household: {
+            id: row.household_id,
+            name: row.household_name,
+            inviteCode: row.invite_code,
+            creatorMemberId: row.creator_member_id,
+            createdAt: row.household_created_at,
+          },
+          member: {
+            id: row.member_id,
+            householdId: row.household_id,
+            displayName: row.display_name,
+            avatarColor: row.avatar_color,
+          },
+        }));
+      },
       async get(householdId) {
         const rows = await request<DbHousehold[]>(
-          `households?select=id,name,invite_code,created_at&id=eq.${encodeURIComponent(householdId)}`,
+          `households?select=id,name,invite_code,creator_member_id,created_at&id=eq.${encodeURIComponent(householdId)}`,
         );
         return rows[0] ? mapHousehold(rows[0]) : null;
       },
@@ -138,6 +170,18 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
           `members?select=id,household_id,display_name,avatar_color&household_id=eq.${encodeURIComponent(householdId)}&order=created_at.asc`,
         );
         return rows.map(mapMember);
+      },
+      async leave(householdId) {
+        await rpc('leave_household', { p_household_id: householdId });
+      },
+      async delete(householdId) {
+        await rpc('delete_household', { p_household_id: householdId });
+      },
+      async transferOwnershipAndLeave(householdId, _memberId, newOwnerMemberId) {
+        await rpc('transfer_household_ownership_and_leave', {
+          p_household_id: householdId,
+          p_new_owner_member_id: newOwnerMemberId,
+        });
       },
     },
     chores: {
@@ -257,7 +301,7 @@ function mapMembership(value: { household: DbHousehold; member: DbMember }): Hou
 }
 
 function mapHousehold(row: DbHousehold): Household {
-  return { id: row.id, name: row.name, inviteCode: row.invite_code, createdAt: row.created_at };
+  return { id: row.id, name: row.name, inviteCode: row.invite_code, creatorMemberId: row.creator_member_id, createdAt: row.created_at };
 }
 
 function mapMember(row: DbMember): Member {

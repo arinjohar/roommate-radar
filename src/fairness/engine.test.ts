@@ -1,4 +1,10 @@
-import { calculateMemberEffort, getFairnessStatus, getPulseInsight, suggestRebalance } from './engine';
+import {
+  calculateFairnessScore,
+  calculateMemberEffort,
+  getFairnessStatus,
+  getPulseInsight,
+  suggestRebalance,
+} from './engine';
 import type { Chore, Completion, Member, PulseResponse } from '../types/domain';
 
 function equal<T>(actual: T, expected: T, description: string) {
@@ -22,11 +28,27 @@ const effort = calculateMemberEffort(members, completions);
 equal(effort[0].actual, 8, 'sums a member’s completed effort');
 equal(effort[1].expected, 5, 'splits expected effort equally');
 equal(getFairnessStatus(effort), 'needs-nudge', 'flags effort outside the 20% band');
+equal(calculateFairnessScore(effort), 40, 'scores average closeness to the equal share');
 equal(suggestRebalance(effort, chores, completions)?.chore.id, 'small', 'chooses the smallest suitable upcoming chore');
-equal(suggestRebalance(calculateMemberEffort(members, [
+const equalEffort = calculateMemberEffort(members, [
   { ...completions[0], pointsAwarded: 5 },
   { ...completions[1], pointsAwarded: 5 },
-]), chores, completions), null, 'does not suggest a swap when effort is balanced');
+]);
+equal(calculateFairnessScore(equalEffort), 100, 'scores an equal split at 100');
+equal(suggestRebalance(equalEffort, chores, completions), null, 'does not suggest a swap when effort is balanced');
+
+const boundaryEffort = calculateMemberEffort(members, [
+  { ...completions[0], pointsAwarded: 6 },
+  { ...completions[1], pointsAwarded: 4 },
+]);
+equal(calculateFairnessScore(boundaryEffort), 80, 'scores the 20% balance boundary at 80');
+equal(getFairnessStatus(boundaryEffort), 'balanced', 'includes the exact 20% boundary in balance');
+equal(calculateFairnessScore(calculateMemberEffort(members, [
+  { ...completions[0], pointsAwarded: 10 },
+])), 0, 'floors extreme imbalance at zero');
+equal(calculateFairnessScore(calculateMemberEffort(members, [])), null, 'requires completed effort');
+equal(calculateFairnessScore(calculateMemberEffort(members.slice(0, 1), completions.slice(0, 1))), null, 'requires at least two members');
+equal(calculateFairnessScore([]), null, 'handles a missing roster');
 
 const pulses: PulseResponse[] = [
   { id: 'pulse', householdId: 'house', memberId: 'a', weekStart: '2026-08-31', cleanliness: 4, noise: 2, communication: 3 },

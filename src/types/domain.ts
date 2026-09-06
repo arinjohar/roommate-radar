@@ -8,6 +8,7 @@ export interface Household {
   id: string;
   name: string;
   inviteCode: string;
+  creatorMemberId: string;
   createdAt: ISODateTimeString;
 }
 
@@ -63,4 +64,8 @@ export interface HouseholdSession {
   guestId: string;
   householdId: string;
   memberId: string;
+  memberships?: Array<{
+    householdId: string;
+    memberId: string;
+  }>;
 }

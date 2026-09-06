@@ -6,6 +6,7 @@ import { AppHeader } from '../../src/components/AppHeader';
 import { Button } from '../../src/components/Button';
 import { TextField } from '../../src/components/TextField';
 import { useHouseholdSession } from '../../src/context/HouseholdSessionContext';
+import { displayNameError } from '../../src/services/householdValidation';
 import { colors, spacing } from '../../src/theme/tokens';
 
 function inviteFailureMessage(error: unknown) {
@@ -26,11 +27,11 @@ export default function JoinHouseholdScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const inviteError = submitted && inviteCode.trim().length < 4 ? 'Enter the invite code your roommate sent.' : undefined;
-  const nameError = submitted && !displayName.trim() ? 'Add the name your roommates know you by.' : undefined;
+  const nameError = submitted ? displayNameError(displayName) : undefined;
 
   const handleJoin = async () => {
     setSubmitted(true);
-    if (inviteCode.trim().length < 4 || !displayName.trim()) {
+    if (inviteCode.trim().length < 4 || displayNameError(displayName)) {
       setSubmitError(null);
       return;
     }

@@ -11,7 +11,7 @@ The demo loop is deliberately small:
 2. See this week's recurring chores.
 3. Complete a chore and earn its effort points.
 4. See each roommate's actual effort versus an equal expected share.
-5. Submit a three-question house pulse.
+5. Submit a three-question house pulse and review this week’s roommate reports inside the household.
 6. Receive one neutral insight and one suggested swap.
 
 Anything that does not strengthen that loop is out of scope for the two days.
@@ -26,7 +26,7 @@ By the final demo:
 - A new user can create or join a four-person demo household.
 - The chore list loads, a chore can be completed, and the change survives an app restart.
 - The fairness dashboard updates from the saved completions.
-- A user can answer cleanliness, noise, and communication pulse questions.
+- A user can answer cleanliness, noise, and communication pulse questions and view other household members’ reports for the week.
 - The app produces a deterministic, respectful rebalance suggestion.
 - Empty, loading, and recoverable error states exist for the core screens.
 - A rehearsed 90-second demo can be completed even if the network becomes unreliable.
@@ -41,6 +41,8 @@ By the final demo:
   call a database SDK directly.
 - Use React Context plus hooks for session and household state. Do not add a large
   state library during the hackathon.
+- Persist the active household and the complete membership set, so one person can
+  create or join multiple households without making earlier household data unreachable.
 
 ### Backend
 
@@ -53,13 +55,13 @@ Required tables:
 
 | Table | Minimum fields |
 | --- | --- |
-| `households` | `id`, `name`, `invite_code`, `created_at` |
+| `households` | `id`, `name`, `invite_code`, `created_by`, `creator_member_id`, `created_at` |
 | `members` | `id`, `household_id`, `display_name`, `avatar_color` |
 | `chores` | `id`, `household_id`, `title`, `points`, `due_at`, `recurrence`, plus assignments through member IDs |
 | `completions` | `id`, `chore_id`, `member_id`, `points_awarded`, `completed_at` |
 | `pulse_responses` | `id`, `household_id`, `member_id`, `week_start`, `cleanliness`, `noise`, `communication` |
 
-The backend adds `households.created_by` and `members.user_id` to bind anonymous
+The backend uses `households.created_by`, `households.creator_member_id`, and `members.user_id` to bind anonymous
 Supabase users to RLS-protected household membership. Completion retry keys and
 table timestamps are persistence details and do not change the client domain
 contract. The app defaults to a persistent AsyncStorage adapter; Supabase is
@@ -126,6 +128,13 @@ For the demo, the engine is transparent and deterministic:
 
 - Balanced: every member is within 20% of `expected`.
 - Needs a nudge: at least one member is more than 20% below `expected`.
+- Fairness Score: when at least two active members have completed effort in the
+  selected week, calculate each member's closeness as
+  `max(0, 1 - abs(gap(m)) / expected)`, average those values, multiply by 100,
+  and round to the nearest integer. A score of 100 means every member is exactly
+  at the equal expected share; lower scores mean the completed effort is farther
+  from that share. Fewer than two active members or zero total completed points
+  is insufficient data and must not be represented as a numeric score.
 - Suggested swap: choose the lowest-gap member, then assign the smallest upcoming
   chore that reduces their gap without overshooting `expected` by more than the
   largest chore value.
@@ -140,14 +149,18 @@ they are not part of the two-day calculation.
 
 ```text
 Landing
+├── Saved households → Select household → Home
 ├── Create household → Name household → Add/select identity → Home
 └── Join with code → Enter code → Add/select identity → Home
 
 Home
 ├── Chores → Chore detail / complete
 ├── Balance → Weekly effort + suggestion
-├── Pulse → Three ratings → Weekly insight
-└── Members → Current residence roster, with the active member labeled “(You)”
+├── Pulse → Three ratings → Roommate reports → Weekly insight
+├── Members → Current residence roster, with the active member labeled “(You)”
+└── Profile settings
+    ├── Member → Leave household → Landing
+    └── Creator → Delete household or transfer ownership and leave → Landing
 ```
 
 Use a four-tab app after onboarding: **Chores**, **Balance**, **Pulse**, and
