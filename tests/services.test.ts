@@ -25,6 +25,30 @@ test('local adapter exposes the deterministic four-member, eight-chore story', a
   assert.equal(chores[0].title, 'Clean bathroom');
 });
 
+test('a saved membership restores the same household and member after an app restart', async () => {
+  const storage = createMemoryStorage();
+  const services = createLocalServices(storage);
+  const membership = await services.households.create({
+    householdName: 'Maple House',
+    displayName: 'Aanya',
+    avatarColor: '#F36F56',
+  });
+  await services.session.save({
+    guestId: membership.member.id,
+    householdId: membership.household.id,
+    memberId: membership.member.id,
+  });
+
+  const reloaded = createLocalServices(storage);
+  const saved = await reloaded.session.load();
+  const household = saved && await reloaded.households.get(saved.householdId);
+  const members = saved ? await reloaded.households.listMembers(saved.householdId) : [];
+
+  assert.equal(household?.name, 'Maple House');
+  assert.equal(members.find((member) => member.id === saved?.memberId)?.displayName, 'Aanya');
+  assert.equal(members.length, 1);
+});
+
 test('completion retries are idempotent and survive adapter recreation', async () => {
   const storage = createMemoryStorage();
   const services = createLocalServices(storage);
