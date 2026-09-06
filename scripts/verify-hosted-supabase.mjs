@@ -80,6 +80,35 @@ async function main() {
   );
   assert(Array.isArray(members) && members.length === 2, 'Joined guest cannot see the expected household roster.');
 
+  const householdId = created.household.id;
+  const input = {
+    title: `Verification chore ${runId}`, points: 3,
+    assigneeIds: [created.member.id, joined.member.id],
+    dueAt: '', dueInDays: null, recurrence: 'one time', repeatEvery: null, repeatUnit: null,
+    starterTitle: null,
+  };
+  const change = (token, action, payload) => rpc(token, 'request_chore_change', { p_household_id: householdId, p_action: action, p_payload: payload });
+  const vote = (token, id) => rpc(token, 'vote_chore_change', { p_household_id: householdId, p_request_id: id, p_vote: 'approved' });
+  const board = (token) => rpc(token, 'get_chore_board', { p_household_id: householdId });
+  const request = await change(owner.access_token, 'create', input);
+  assert(request.status === 'pending', 'A two-member household must review new chores by default.');
+  await vote(guest.access_token, request.pending.id);
+  const newChore = (await board(guest.access_token)).chores.find((item) => item.title === input.title);
+  assert(newChore?.assigneeIds.length === 2, 'Multi-member assignments were not saved.');
+  const edit = await change(owner.access_token, 'edit', { ...input, points: 4, choreId: newChore.id, expectedVersion: newChore.version, scope: 'future' });
+  await vote(guest.access_token, edit.pending.id);
+  const award = await rpc(guest.access_token, 'complete_chore', { p_chore_id: newChore.id, p_idempotency_key: `new-${runId}` });
+  const duplicate = await rpc(owner.access_token, 'complete_chore', { p_chore_id: newChore.id, p_idempotency_key: `duplicate-${runId}` });
+  assert(award.id === duplicate.id && award.points_awarded === 4, 'Cross-member completion duplicated or awarded the wrong points.');
+  const totals = await rest(owner.access_token, `member_point_totals?household_id=eq.${householdId}`);
+  assert(Number(totals.find((item) => item.member_id === joined.member.id)?.total_points) === 4, 'Balance point total does not match the saved award.');
+  const removable = await change(owner.access_token, 'create', { ...input, title: `Remove ${runId}` });
+  await vote(guest.access_token, removable.pending.id);
+  const toDelete = (await board(owner.access_token)).chores.find((item) => item.title === `Remove ${runId}`);
+  const deletion = await change(owner.access_token, 'archive', { choreId: toDelete.id, expectedVersion: toDelete.version, scope: 'future' });
+  await vote(guest.access_token, deletion.pending.id);
+  assert((await board(owner.access_token)).chores.find((item) => item.id === toDelete.id)?.archivedAt, 'Deletion did not archive the chore.');
+
   const demoHiddenBeforeJoin = await rest(
     guest.access_token,
     `households?select=id&id=eq.${demoHouseholdId}`,
@@ -146,7 +175,7 @@ async function main() {
   assert(ownCompletionsAfterReset.length === 0, 'reset_my_demo_data did not remove the active user completion.');
   assert(ownPulsesAfterReset.length === 0, 'reset_my_demo_data did not remove the active user pulse.');
 
-  console.log('Hosted verification passed: anonymous auth, RLS, create/join, seeded demo, completion idempotency, pulse upsert, and reset.');
+  console.log('Hosted verification passed: anonymous auth, RLS, create/join, chore creation/edit/archive and approvals, saved member totals, seeded demo, completion idempotency, pulse upsert, and reset.');
 }
 
 function mondayUtc() {

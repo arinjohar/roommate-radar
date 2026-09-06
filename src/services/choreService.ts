@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { Chore, Completion } from '../types/domain';
+import { nextDueDate, parseSchedule, type ChoreScope } from './choreSchedule';
 
 export type TrustLevel = 'open' | 'points-and-new' | 'everything-except-date';
 export type Approval = 'pending' | 'approved';
@@ -14,6 +15,10 @@ export type ChoreStarter = {
 };
 
 export type PendingChore = ChoreStarter & {
+  action?: 'create' | 'edit' | 'archive';
+  choreId?: string;
+  scope?: ChoreScope;
+  expectedVersion?: number;
   id: string;
   householdId: string;
   dueAt: string;
@@ -47,6 +52,8 @@ export type ChoreRequest = ChoreStarter & {
 };
 
 export type ChoreService = {
+  requestEdit: (input: ChoreRequest & { choreId: string; scope: ChoreScope; expectedVersion: number }) => Promise<void>;
+  requestArchive: (input: { householdId: string; choreId: string; requestedById: string; scope: ChoreScope; expectedVersion: number }) => Promise<void>;
   getBoard: (householdId: string) => Promise<ChoreBoardSnapshot>;
   setHouseholdMembers: (householdId: string, memberIds: string[]) => Promise<void>;
   requestChore: (input: ChoreRequest) => Promise<{ status: 'created'; chore: Chore } | { status: 'pending'; pending: PendingChore }>;
@@ -60,8 +67,8 @@ export type ChoreService = {
 };
 
 type Storage = Pick<typeof AsyncStorage, 'getItem' | 'setItem'>;
-type ServiceOptions = { now?: () => Date };
-type HouseholdBoardData = ChoreBoardSnapshot & { memberIds: string[] };
+type ServiceOptions = { now?: () => Date; initialData?: (householdId: string) => Promise<{ chores: Chore[]; completions: Completion[]; memberIds: string[] }> };
+type HouseholdBoardData = ChoreBoardSnapshot & { memberIds: string[]; seriesTemplates?: Record<string, Chore> };
 type PersistedState = { households: Record<string, HouseholdBoardData> };
 
 const STORAGE_KEY = '@roommate-radar/chore-board/v2';
@@ -119,17 +126,8 @@ function createHouseholdData(householdId: string): HouseholdBoardData {
 }
 
 function recurrenceInterval(recurrence: string) {
-  if (recurrence === 'weekly') return { count: 1, unit: 'weeks' as const };
-  const match = recurrence.match(/^every (\d+) (day|week|month)s?$/i);
-  return match ? { count: Number(match[1]), unit: `${match[2]}s` as 'days' | 'weeks' | 'months' } : null;
-}
-
-function addInterval(date: Date, count: number, unit: 'days' | 'weeks' | 'months') {
-  const next = new Date(date);
-  if (unit === 'days') next.setUTCDate(next.getUTCDate() + count);
-  if (unit === 'weeks') next.setUTCDate(next.getUTCDate() + count * 7);
-  if (unit === 'months') next.setUTCMonth(next.getUTCMonth() + count);
-  return next;
+  const schedule = parseSchedule(recurrence);
+  return schedule.repeatEvery && schedule.repeatUnit ? { count: schedule.repeatEvery, unit: schedule.repeatUnit } : null;
 }
 
 function materializeRecurringChores(board: HouseholdBoardData, now: Date) {
@@ -137,23 +135,27 @@ function materializeRecurringChores(board: HouseholdBoardData, now: Date) {
   const seriesIds = [...new Set(board.chores.map((chore) => chore.seriesId ?? chore.id))];
   for (const seriesId of seriesIds) {
     const series = board.chores.filter((chore) => (chore.seriesId ?? chore.id) === seriesId);
-    const latest = [...series].sort((a, b) => Date.parse(b.dueAt) - Date.parse(a.dueAt))[0];
-    const interval = latest ? recurrenceInterval(latest.recurrence) : null;
-    if (!latest || !interval || !completedIds.has(latest.id)) continue;
-    const nextDue = addInterval(new Date(latest.dueAt), interval.count, interval.unit);
+    const latest = series[series.length - 1];
+    const template = board.seriesTemplates?.[seriesId] ?? latest;
+    const interval = template ? recurrenceInterval(template.recurrence) : null;
+    if (!latest || !interval || template.archivedAt || (!latest.archivedAt && !completedIds.has(latest.id)) || !latest.dueAt) continue;
+    const nextDue = new Date(nextDueDate(latest.scheduledAt ?? latest.dueAt, interval.count, interval.unit));
     if (nextDue > now) continue;
-    board.chores.push({ ...latest, id: `recurrence-${seriesId}-${nextDue.getTime()}`, dueAt: nextDue.toISOString(), seriesId, isPreApproved: true });
+    board.chores.push({ ...template, archivedAt: null, version: 1, id: `recurrence-${seriesId}-${nextDue.getTime()}`, dueAt: nextDue.toISOString(), scheduledAt: nextDue.toISOString(), seriesId, isPreApproved: true });
   }
 }
 
-function validateChore(input: ChoreRequest, today: Date) {
+function validateChore(input: ChoreRequest, today: Date, originalDueAt?: string) {
   const normalizedTitle = input.title.trim();
   const dueDay = input.dueAt.slice(0, 10);
+  if (input.dueAt && Number.isNaN(Date.parse(input.dueAt))) throw new Error('Invalid date.');
   const parsedDueDay = new Date(`${dueDay}T00:00:00.000Z`);
   const todayUtc = new Date(today);
   todayUtc.setUTCHours(0, 0, 0, 0);
-  if (dueDay && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDay) || Number.isNaN(parsedDueDay.getTime()) || parsedDueDay.toISOString().slice(0, 10) !== dueDay || parsedDueDay < todayUtc)) throw new Error('Invalid date.');
-  if (!normalizedTitle) throw new Error('Give this chore a short, clear name.');
+  if (dueDay && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDay) || Number.isNaN(parsedDueDay.getTime()) || parsedDueDay.toISOString().slice(0, 10) !== dueDay || (parsedDueDay < todayUtc && dueDay !== originalDueAt?.slice(0, 10)))) throw new Error('Invalid date.');
+  if (!normalizedTitle || normalizedTitle.length > 120) throw new Error('Give this chore a name between 1 and 120 characters.');
+  const schedule = parseSchedule(input.recurrence);
+  if (schedule.repeatEvery && !dueDay) throw new Error('Choose a due date for a repeating chore.');
   if (!Number.isInteger(input.points) || input.points < 1 || input.points > 10) throw new Error('Choose between 1 and 10 effort points.');
   if (!Number.isInteger(input.dueInDays) && input.dueInDays !== null) throw new Error('Invalid due interval.');
   return normalizedTitle;
@@ -178,10 +180,13 @@ function createApprovedChore(board: HouseholdBoardData, input: ChoreRequest, tit
     points: input.points,
     assigneeIds: [...input.assigneeIds],
     dueAt: input.dueAt,
+    scheduledAt: input.dueAt,
     dueIntervalDays: input.dueInDays,
     recurrence: input.recurrence,
     isPreApproved: true,
     seriesId: choreId,
+    version: 1,
+    ...parseSchedule(input.recurrence),
   };
   board.chores.push(chore);
   const starter: ChoreStarter = { title, points: input.points, assigneeIds: [...input.assigneeIds], recurrence: input.recurrence, dueInDays: input.dueInDays };
@@ -203,7 +208,11 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
   async function mutate<T>(householdId: string, change: (board: HouseholdBoardData) => T | Promise<T>): Promise<T> {
     const operation = mutationQueue.then(async () => {
       const state = await readState();
-      const board = state.households[householdId] ?? createHouseholdData(householdId);
+      let board = state.households[householdId];
+      if (!board) {
+        board = createHouseholdData(householdId);
+        if (options.initialData) Object.assign(board, await options.initialData(householdId));
+      }
       state.households[householdId] = board;
       const result = await change(board);
       await storage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -214,6 +223,16 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
   }
 
   return {
+    async requestEdit(input) {
+      await mutate(input.householdId, (board) => requestChange(board, input, 'edit'));
+    },
+    async requestArchive(input) {
+      await mutate(input.householdId, (board) => {
+        const chore = board.chores.find((item) => item.id === input.choreId);
+        if (!chore) throw new Error('Chore not found.');
+        requestChange(board, { ...chore, dueInDays: chore.dueIntervalDays ?? null, starterTitle: null, ...input }, 'archive');
+      });
+    },
     getBoard(householdId) {
       return mutate(householdId, (board) => {
         materializeRecurringChores(board, now());
@@ -252,6 +271,8 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
 
     requestChore(input) {
       return mutate(input.householdId, (board) => {
+        approvalsFor(board.memberIds, input.requestedById);
+        if (input.assigneeIds.some((id) => !board.memberIds.includes(id))) throw new Error('Choose roommates from this household.');
         const title = validateChore(input, now());
         const saved = input.starterTitle
           ? board.choreStarters.find((item) => item.title.toLowerCase() === input.starterTitle?.toLowerCase())
@@ -265,7 +286,7 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
         const requiresApproval = board.trustLevel === 'open'
           ? false
           : board.trustLevel === 'points-and-new'
-            ? !saved || saved.points !== input.points
+            ? !saved || saved.title.toLowerCase() !== title.toLowerCase() || saved.points !== input.points
             : !usesSavedSettings;
         if (!requiresApproval) return { status: 'created' as const, chore: createApprovedChore(board, input, title, now()) };
         const pending: PendingChore = {
@@ -301,12 +322,17 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
         pending.approvals[memberId] = 'approved';
         if (!board.memberIds.every((id) => pending.approvals[id] === 'approved')) return null;
         board.pendingChores.splice(index, 1);
+        if (pending.action && pending.action !== 'create') {
+          applyChange(board, pending);
+          return null;
+        }
         return createApprovedChore(board, { ...pending, starterTitle: null }, pending.title, now());
       });
     },
 
     requestTrustLevelChange({ householdId, memberId, nextTrustLevel }) {
       return mutate(householdId, (board) => {
+        approvalsFor(board.memberIds, memberId);
         if (nextTrustLevel === board.trustLevel) return;
         if (board.pendingTrustChanges.length > 0) throw new Error('A trust level change is already pending.');
         if (trustLevelStrictness[nextTrustLevel] > trustLevelStrictness[board.trustLevel]) {
@@ -372,14 +398,47 @@ export function createChoreService(storage: Storage = AsyncStorage, options: Ser
       return mutate(householdId, (board) => {
         const chore = board.chores.find((candidate) => candidate.id === choreId);
         if (!chore) throw new Error('That chore is no longer available. Refresh and try again.');
+        if (!board.memberIds.includes(memberId)) throw new Error('Household membership required.');
         const existing = board.completions.find((completion) => completion.choreId === choreId);
         if (existing) return existing;
+        if (chore.archivedAt) throw new Error('That chore was deleted.');
         const completion: Completion = { id: `completion-${choreId}`, choreId, memberId, pointsAwarded: chore.points, completedAt: now().toISOString() };
         board.completions.push(completion);
         return completion;
       });
     },
   };
-}
 
-export const choreService = createChoreService();
+  function requestChange(board: HouseholdBoardData, input: ChoreRequest & { choreId: string; scope: ChoreScope; expectedVersion: number }, action: 'edit' | 'archive') {
+    const chore = board.chores.find((item) => item.id === input.choreId);
+    if (!chore || chore.archivedAt) throw new Error('That chore is no longer active.');
+    if (board.completions.some((item) => item.choreId === chore.id)) throw new Error('Completed chores keep their history.');
+    if ((chore.version ?? 1) !== input.expectedVersion) throw new Error('This chore changed. Refresh before editing.');
+    if (board.pendingChores.some((item) => item.choreId === chore.id)) throw new Error('A change for this chore is already pending.');
+    const approvals = approvalsFor(board.memberIds, input.requestedById);
+    if (input.assigneeIds.some((id) => !board.memberIds.includes(id))) throw new Error('Choose roommates from this household.');
+    const title = action === 'edit' ? validateChore(input, now(), chore.dueAt) : chore.title;
+    if (action === 'edit' && input.scope === 'occurrence' && JSON.stringify(parseSchedule(input.recurrence)) !== JSON.stringify(parseSchedule(chore.recurrence))) throw new Error('Choose This and future to change the repeat schedule.');
+    const pending: PendingChore = { ...input, title, action, id: `change-${now().getTime()}-${Math.random()}`, approvals };
+    const needsApproval = board.trustLevel === 'everything-except-date' || (board.trustLevel === 'points-and-new' && input.points !== chore.points);
+    if (needsApproval && !board.memberIds.every((id) => approvals[id] === 'approved')) board.pendingChores.push(pending);
+    else applyChange(board, pending);
+  }
+
+  function applyChange(board: HouseholdBoardData, input: PendingChore) {
+    const chore = board.chores.find((item) => item.id === input.choreId);
+    if (!chore || chore.archivedAt || (chore.version ?? 1) !== input.expectedVersion || board.completions.some((item) => item.choreId === chore.id)) throw new Error('This chore changed. Reject this request and refresh.');
+    const seriesId = chore.seriesId ?? chore.id;
+    board.seriesTemplates ??= {};
+    board.seriesTemplates[seriesId] ??= clone(chore);
+    chore.scheduledAt ??= chore.dueAt;
+    if (input.action === 'archive') chore.archivedAt = now().toISOString();
+    else {
+      Object.assign(chore, { title: input.title, points: input.points, assigneeIds: [...input.assigneeIds], dueAt: input.dueAt, recurrence: input.recurrence, dueIntervalDays: input.dueInDays, ...parseSchedule(input.recurrence) });
+      const starter = { title: input.title, points: input.points, assigneeIds: [...input.assigneeIds], recurrence: input.recurrence, dueInDays: input.dueInDays };
+      board.choreStarters = [...board.choreStarters.filter((item) => item.title.toLowerCase() !== input.title.toLowerCase()), starter];
+    }
+    chore.version = (chore.version ?? 1) + 1;
+    if (input.scope === 'future') { chore.scheduledAt = chore.dueAt; board.seriesTemplates[seriesId] = clone(chore); }
+  }
+}

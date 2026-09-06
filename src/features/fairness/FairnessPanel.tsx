@@ -29,6 +29,7 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
   const [chores, setChores] = useState<Chore[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [responses, setResponses] = useState<PulseResponse[]>([]);
+  const [pointTotals, setPointTotals] = useState<Record<string, number>>({});
   const [ratings, setRatings] = useState({ cleanliness: 3, noise: 3, communication: 3 });
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,24 +39,28 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
   useEffect(() => {
     let active = true;
     setIsLoading(true);
-    Promise.all([
+    const refresh = () => Promise.all([
       services.households.listMembers(householdId),
       services.chores.list(householdId),
       services.chores.listCompletions(householdId, week.from, week.to),
       services.pulse.list(householdId, week.weekStart),
-    ]).then(([nextMembers, nextChores, nextCompletions, nextResponses]) => {
+      services.chores.listMemberPoints(householdId),
+    ]).then(([nextMembers, nextChores, nextCompletions, nextResponses, totals]) => {
       if (!active) return;
       setMembers(nextMembers);
       setChores(nextChores);
       setCompletions(nextCompletions);
       setResponses(nextResponses);
+      setPointTotals(Object.fromEntries(totals.map((item) => [item.memberId, item.totalPoints])));
       setError(null);
     }).catch(() => {
       if (active) setError('We could not load the household picture. Please try again.');
     }).finally(() => {
       if (active) setIsLoading(false);
     });
-    return () => { active = false; };
+    void refresh();
+    const interval = setInterval(() => void refresh(), 3000);
+    return () => { active = false; clearInterval(interval); };
   }, [householdId, week]);
 
   const effort = useMemo(() => calculateMemberEffort(members, completions), [members, completions]);
@@ -80,6 +85,7 @@ export function FairnessPanel({ householdId, mode }: { householdId: string; mode
             <View style={styles.effortMain}>
               <View style={styles.names}><Text style={styles.name}>{member.displayName}</Text><Text style={styles.points}>{member.actual} pts</Text></View>
               <View style={styles.track}><View style={[styles.fill, { backgroundColor: member.avatarColor, width: `${fill}%` }]} /></View>
+              <Text style={styles.note}>{pointTotals[member.id] ?? 0} points earned overall</Text>
             </View>
           </View>;
         })}

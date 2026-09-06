@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { Completion, HouseholdSession, PulseResponse } from '../types/domain';
+import type { HouseholdSession, PulseResponse } from '../types/domain';
 import type { RoommateRadarServices } from './contracts';
 import { createDemoData, type DemoData } from './demoData';
+import { createChoreService } from './choreService';
 
 const DATA_KEY = '@roommate-radar/demo-data/v1';
 const SESSION_KEY = '@roommate-radar/session/v1';
@@ -40,7 +41,14 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
     await storage.setItem(DATA_KEY, JSON.stringify(data));
   }
 
+  const choreBoard = createChoreService(storage, { initialData: async (householdId) => {
+    const data = await readData();
+    const chores = data.chores.filter((item) => item.householdId === householdId);
+    return { chores, completions: data.completions.filter((item) => chores.some((chore) => chore.id === item.choreId)), memberIds: data.members.filter((item) => item.householdId === householdId).map((item) => item.id) };
+  } });
+
   return {
+    choreBoard,
     households: {
       async create(input) {
         const data = await readData();
@@ -85,43 +93,25 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
       },
     },
     chores: {
+      async listMemberPoints(householdId) {
+        const board = await choreBoard.getBoard(householdId);
+        return (await readData()).members.filter((member) => member.householdId === householdId).map((member) => ({ memberId: member.id, totalPoints: board.completions.filter((item) => item.memberId === member.id).reduce((sum, item) => sum + item.pointsAwarded, 0) }));
+      },
       async list(householdId) {
-        return (await readData()).chores
-          .filter((item) => item.householdId === householdId)
+        return (await choreBoard.getBoard(householdId)).chores
+          .filter((item) => !item.archivedAt)
           .sort((a, b) => a.dueAt.localeCompare(b.dueAt));
       },
       async listCompletions(householdId, from, to) {
-        const data = await readData();
-        const choreIds = new Set(
-          data.chores.filter((item) => item.householdId === householdId).map((item) => item.id),
-        );
-        return data.completions.filter(
-          (item) => choreIds.has(item.choreId) && item.completedAt >= from && item.completedAt < to,
-        );
+        return (await choreBoard.getBoard(householdId)).completions.filter((item) => item.completedAt >= from && item.completedAt < to);
       },
       async complete(choreId, idempotencyKey) {
-        const data = await readData();
         const session = await loadSession(storage);
-        const chore = data.chores.find((item) => item.id === choreId);
-        if (!chore) throw new Error('That chore no longer exists.');
-        if (!session || session.householdId !== chore.householdId) {
+        if (!session) {
           throw new Error('Join this household before completing a chore.');
         }
-        const requestKey = `${session.memberId}:${idempotencyKey}`;
-        const existingId = data.completionRequestIds[requestKey];
-        const existing = data.completions.find((item) => item.id === existingId);
-        if (existing) return existing;
-        const completion: Completion = {
-          id: makeId(),
-          choreId,
-          memberId: session.memberId,
-          pointsAwarded: chore.points,
-          completedAt: new Date().toISOString(),
-        };
-        data.completions.push(completion);
-        data.completionRequestIds[requestKey] = completion.id;
-        await writeData(data);
-        return completion;
+        if (!idempotencyKey.trim()) throw new Error('Idempotency key required.');
+        return choreBoard.completeChore({ householdId: session.householdId, choreId, memberId: session.memberId });
       },
     },
     pulse: {
@@ -167,6 +157,7 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
     demo: {
       async reset() {
         await writeData(createDemoData());
+        await storage.removeItem('@roommate-radar/chore-board/v2');
         await storage.removeItem(SESSION_KEY);
       },
     },

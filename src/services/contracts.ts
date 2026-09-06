@@ -34,6 +34,7 @@ export interface HouseholdService {
 }
 
 export interface ChoreService {
+  listMemberPoints(householdId: string): Promise<{ memberId: string; totalPoints: number }[]>;
   list(householdId: string): Promise<Chore[]>;
   listCompletions(householdId: string, from: string, to: string): Promise<Completion[]>;
   complete(choreId: string, idempotencyKey: string): Promise<Completion>;
@@ -59,6 +60,7 @@ export interface DemoService {
 }
 
 export interface RoommateRadarServices {
+  choreBoard: import('./choreService').ChoreService;
   households: HouseholdService;
   chores: ChoreService;
   pulse: PulseService;
