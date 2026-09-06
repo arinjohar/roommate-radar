@@ -11,7 +11,7 @@ import type {
   RoommateRadarServices,
   TrustLevel,
 } from './contracts';
-import { nextDueDate, parseSchedule, type ChoreScope } from './choreSchedule';
+import { initialRecurringDueDate, nextDueDate, parseSchedule, type ChoreScope } from './choreSchedule';
 import { createDemoData, type DemoData } from './demoData';
 import { validateDisplayName, validateHouseholdName } from './householdValidation';
 
@@ -98,11 +98,20 @@ function validateChore(input: ChoreRequest, today: Date, originalDueAt?: string)
   todayUtc.setUTCHours(0, 0, 0, 0);
   if (dueDay && (!/^\d{4}-\d{2}-\d{2}$/.test(dueDay) || Number.isNaN(parsedDueDay.getTime()) || parsedDueDay.toISOString().slice(0, 10) !== dueDay || (parsedDueDay < todayUtc && dueDay !== originalDueAt?.slice(0, 10)))) throw new Error('Invalid date.');
   if (!normalizedTitle || normalizedTitle.length > 120) throw new Error('Give this chore a name between 1 and 120 characters.');
-  const schedule = parseSchedule(input.recurrence);
-  if (schedule.repeatEvery && !dueDay) throw new Error('Choose a due date for a repeating chore.');
+  parseSchedule(input.recurrence);
   if (!Number.isInteger(input.points) || input.points < 1 || input.points > 10) throw new Error('Choose between 1 and 10 effort points.');
   if (!Number.isInteger(input.dueInDays) && input.dueInDays !== null) throw new Error('Invalid due interval.');
   return normalizedTitle;
+}
+
+function normalizeChoreInput<T extends ChoreRequest>(input: T, currentTime: Date): T {
+  const schedule = parseSchedule(input.recurrence);
+  if (!schedule.repeatEvery || input.dueAt) return input;
+  const dueAt = initialRecurringDueDate(input.recurrence, currentTime);
+  const due = new Date(dueAt);
+  const start = new Date(Date.UTC(currentTime.getUTCFullYear(), currentTime.getUTCMonth(), currentTime.getUTCDate()));
+  const dueInDays = Math.round((Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()) - start.getTime()) / 86_400_000);
+  return { ...input, dueAt, dueInDays };
 }
 
 function sameIds(left: string[], right: string[]) {
@@ -246,17 +255,18 @@ export function createLocalServices(
   }
 
   function requestChange(data: DemoData, settings: ChoreBoardSettings, memberIds: string[], input: ChoreRequest & { choreId: string; scope: ChoreScope; expectedVersion: number }, action: 'edit' | 'archive') {
-    const chore = data.chores.find((item) => item.id === input.choreId && item.householdId === input.householdId);
+    const normalizedInput = action === 'edit' ? normalizeChoreInput(input, now()) : input;
+    const chore = data.chores.find((item) => item.id === normalizedInput.choreId && item.householdId === normalizedInput.householdId);
     if (!chore || chore.archivedAt) throw new Error('That chore is no longer active.');
     if (data.completions.some((item) => item.choreId === chore.id)) throw new Error('Completed chores keep their history.');
-    if ((chore.version ?? 1) !== input.expectedVersion) throw new Error('This chore changed. Refresh before editing.');
+    if ((chore.version ?? 1) !== normalizedInput.expectedVersion) throw new Error('This chore changed. Refresh before editing.');
     if (settings.pendingChores.some((item) => item.choreId === chore.id)) throw new Error('A change for this chore is already pending.');
-    const approvals = approvalsFor(memberIds, input.requestedById);
-    if (input.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
-    const title = action === 'edit' ? validateChore(input, now(), chore.dueAt) : chore.title;
-    if (action === 'edit' && input.scope === 'occurrence' && JSON.stringify(parseSchedule(input.recurrence)) !== JSON.stringify(parseSchedule(chore.recurrence))) throw new Error('Choose This and future to change the repeat schedule.');
-    const pending: PendingChore = { ...input, title, action, id: `change-${now().getTime()}-${Math.random()}`, approvals };
-    const needsApproval = settings.trustLevel === 'everything-except-date' || (settings.trustLevel === 'points-and-new' && input.points !== chore.points);
+    const approvals = approvalsFor(memberIds, normalizedInput.requestedById);
+    if (normalizedInput.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
+    const title = action === 'edit' ? validateChore(normalizedInput, now(), chore.dueAt) : chore.title;
+    if (action === 'edit' && normalizedInput.scope === 'occurrence' && JSON.stringify(parseSchedule(normalizedInput.recurrence)) !== JSON.stringify(parseSchedule(chore.recurrence))) throw new Error('Choose This and future to change the repeat schedule.');
+    const pending: PendingChore = { ...normalizedInput, title, action, id: `change-${now().getTime()}-${Math.random()}`, approvals };
+    const needsApproval = settings.trustLevel === 'everything-except-date' || (settings.trustLevel === 'points-and-new' && normalizedInput.points !== chore.points);
     if (needsApproval && !memberIds.every((id) => approvals[id] === 'approved')) settings.pendingChores.push(pending);
     else applyChange(data, settings, pending);
   }
@@ -453,20 +463,21 @@ export function createLocalServices(
       },
       requestChore(input) {
         return mutateBoard(input.householdId, (data, settings, memberIds) => {
-          approvalsFor(memberIds, input.requestedById);
-          if (input.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
-          const title = validateChore(input, now());
-          const saved = input.starterTitle
+          const normalizedInput = normalizeChoreInput(input, now());
+          approvalsFor(memberIds, normalizedInput.requestedById);
+          if (normalizedInput.assigneeIds.some((id) => !memberIds.includes(id))) throw new Error('Choose roommates from this household.');
+          const title = validateChore(normalizedInput, now());
+          const saved = normalizedInput.starterTitle
             ? settings.choreStarters.find(
-              (item) => item.title.toLowerCase() === input.starterTitle?.toLowerCase(),
+              (item) => item.title.toLowerCase() === normalizedInput.starterTitle?.toLowerCase(),
             )
             : undefined;
           const usesSavedSettings = Boolean(saved)
             && saved?.title.toLowerCase() === title.toLowerCase()
-            && saved.points === input.points
-            && sameIds(saved.assigneeIds, input.assigneeIds)
-            && saved.recurrence === input.recurrence
-            && saved.dueInDays === input.dueInDays;
+            && saved.points === normalizedInput.points
+            && sameIds(saved.assigneeIds, normalizedInput.assigneeIds)
+            && saved.recurrence === normalizedInput.recurrence
+            && saved.dueInDays === normalizedInput.dueInDays;
           const requiresApproval = settings.trustLevel === 'open'
             ? false
             : settings.trustLevel === 'points-and-new'
@@ -475,25 +486,25 @@ export function createLocalServices(
           if (!requiresApproval) {
             return {
               status: 'created' as const,
-              chore: createApprovedChore(data, settings, input, title),
+              chore: createApprovedChore(data, settings, normalizedInput, title),
             };
           }
           const pending: PendingChore = {
             id: `pending-${makeId()}`,
-            householdId: input.householdId,
+            householdId: normalizedInput.householdId,
             title,
-            points: input.points,
-            assigneeIds: [...input.assigneeIds],
-            dueAt: input.dueAt,
-            dueInDays: input.dueInDays,
-            recurrence: input.recurrence,
-            requestedById: input.requestedById,
+            points: normalizedInput.points,
+            assigneeIds: [...normalizedInput.assigneeIds],
+            dueAt: normalizedInput.dueAt,
+            dueInDays: normalizedInput.dueInDays,
+            recurrence: normalizedInput.recurrence,
+            requestedById: normalizedInput.requestedById,
             approvals: approvalsFor(memberIds, input.requestedById),
           };
           if (memberIds.every((id) => pending.approvals[id] === 'approved')) {
             return {
               status: 'created' as const,
-              chore: createApprovedChore(data, settings, input, title),
+              chore: createApprovedChore(data, settings, normalizedInput, title),
             };
           }
           settings.pendingChores.push(pending);

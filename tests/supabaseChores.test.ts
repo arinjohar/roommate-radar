@@ -25,3 +25,20 @@ test('hosted board uses authenticated RPCs, structured schedules, and database p
     assert.deepEqual(await services.chores.list('home'), [{ id: 'active' }]);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('hosted writes fill a missing recurring due date before calling the RPC', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: { url: string; init: RequestInit }[] = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ status: 'created', chore: { id: 'new' } }), { status: 200 });
+  };
+  try {
+    const services = createSupabaseServices({ url: 'https://example.supabase.co', anonKey: 'public-key', getAccessToken: async () => 'user-token', session: { load: async () => null, save: async () => {}, clear: async () => {} } });
+    await services.chores.requestChore({ householdId: 'home', requestedById: 'member', title: 'Bins', points: 2, assigneeIds: ['member'], recurrence: 'every Wednesday', dueAt: '', dueInDays: null, starterTitle: null });
+    const body = JSON.parse(String(calls[0].init.body));
+    assert.match(body.p_payload.dueAt, /^\d{4}-\d{2}-\d{2}T18:00:00\.000Z$/);
+    assert.equal(body.p_payload.repeatEvery, 1);
+    assert.equal(body.p_payload.repeatUnit, 'weeks');
+  } finally { globalThis.fetch = originalFetch; }
+});

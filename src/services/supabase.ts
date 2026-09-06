@@ -7,7 +7,7 @@ import type {
 } from '../types/domain';
 import type { HouseholdMembership, RoommateRadarServices } from './contracts';
 import type { ChoreBoardSnapshot, ChoreService } from './contracts';
-import { parseSchedule } from './choreSchedule';
+import { initialRecurringDueDate, parseSchedule } from './choreSchedule';
 import { validateDisplayName, validateHouseholdName } from './householdValidation';
 
 interface SupabaseOptions {
@@ -80,10 +80,25 @@ export function createSupabaseServices(options: SupabaseOptions): RoommateRadarS
 
   const change = <T>(householdId: string, action: string, payload: object) => rpc<T>('request_chore_change', { p_household_id: householdId, p_action: action, p_payload: payload });
   const vote = (householdId: string, pendingId: string, choice: string) => rpc<Chore | null>('vote_chore_change', { p_household_id: householdId, p_request_id: pendingId, p_vote: choice });
+  const normalizeSchedule = <T extends { recurrence: string; dueAt: string; dueInDays: number | null }>(input: T): T => {
+    const schedule = parseSchedule(input.recurrence);
+    if (!schedule.repeatEvery || input.dueAt) return input;
+    const dueAt = initialRecurringDueDate(input.recurrence, new Date());
+    const today = new Date();
+    const due = new Date(dueAt);
+    const dueInDays = Math.round((Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate()) - Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())) / 86_400_000);
+    return { ...input, dueAt, dueInDays };
+  };
   const choreBoard: Omit<ChoreService, 'list' | 'listCompletions' | 'complete' | 'listMemberPoints'> = {
     getBoard: (householdId) => rpc<ChoreBoardSnapshot>('get_chore_board', { p_household_id: householdId }),
-    requestChore: (input) => change(input.householdId, 'create', { ...input, ...parseSchedule(input.recurrence) }),
-    async requestEdit(input) { await change(input.householdId, 'edit', { ...input, ...parseSchedule(input.recurrence) }); },
+    requestChore: (input) => {
+      const normalized = normalizeSchedule(input);
+      return change(normalized.householdId, 'create', { ...normalized, ...parseSchedule(normalized.recurrence) });
+    },
+    async requestEdit(input) {
+      const normalized = normalizeSchedule(input);
+      await change(normalized.householdId, 'edit', { ...normalized, ...parseSchedule(normalized.recurrence) });
+    },
     async requestArchive(input) { await change(input.householdId, 'archive', input); },
     voteOnChore: (input) => vote(input.householdId, input.pendingId, input.vote),
     async requestTrustLevelChange(input) { await change(input.householdId, 'trust', input); },
