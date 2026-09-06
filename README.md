@@ -74,30 +74,45 @@ edit it for the data mode described above:
 test -f .env || cp .env.example .env
 ```
 
-For physical-phone testing from a Mac, use this startup command:
+For physical-phone testing from a Mac, start with a local-network connection:
 
 ```bash
-npm run start:tunnel -- --go --clear
+npx expo start --go --lan
 ```
 
-This is the required command for the team's Mac-to-phone setup. It targets Expo
-Go, clears the bundle cache, and uses a tunnel to avoid the local-network timeouts
-seen on some iPhones. Stop any previous Expo server with `Control+C` first.
-Keep this Terminal window open while using the app.
+This targets Expo Go and requires the Mac and phone to be on the same Wi-Fi
+network with permission to communicate. Stop any previous Expo server with
+`Control+C` first, and keep this Terminal window open while using the app.
+Neither LAN nor tunnel mode is guaranteed to work on every network.
 
 ### Open it on a physical phone from a Mac
 
 1. Install an SDK 57-compatible Expo Go build on the phone (see compatibility
    notes below).
-2. Connect both the Mac and phone to the internet; they can use different networks.
-3. Run `npm run start:tunnel -- --go --clear` and wait for both `Tunnel connected`
-   and `Tunnel ready` in Terminal.
+2. Connect the Mac and phone to the same Wi-Fi. On iPhone, enable **Settings →
+   Privacy & Security → Local Network → Expo Go** if listed.
+3. Run `npx expo start --go --lan` and wait for the QR code.
 4. On iPhone, scan the QR code with the built-in Camera app and tap the Expo Go
    banner. On Android, open Expo Go and choose **Scan QR code**.
 
 Scan the newly generated QR code each time you restart the server; an old code
-may point to a server that is no longer running. A tunnel is slower than local
-Wi-Fi and still requires an SDK-compatible Expo Go build.
+may point to a server that is no longer running. Keep the Mac awake and the
+server running while testing.
+
+If the network prevents the phone from reaching the Mac, stop Expo and try:
+
+```bash
+npm run start:tunnel -- --go --clear
+```
+
+Wait for both `Tunnel connected` and `Tunnel ready` before scanning the new QR
+code. Both devices need internet access, but can use different networks. Tunnels
+depend on ngrok and can fail intermittently; they are an alternative, not a Mac
+requirement. If startup reports `Cannot read properties of undefined (reading
+'body')` with an ngrok status link, the tunnel has failed to start. Check
+[ngrok status](https://status.ngrok.com/) and try LAN on a network that allows
+device-to-device traffic. The empty-cache warning after `--clear` is expected
+and is not itself a failure. Both modes require an SDK-compatible Expo Go build.
 
 ### Open the iOS Simulator on a Mac
 
