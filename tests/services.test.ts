@@ -49,6 +49,41 @@ test('a saved membership restores the same household and member after an app res
   assert.equal(members.length, 1);
 });
 
+test('household and member names enforce the hosted database limits locally', async () => {
+  const services = createLocalServices(createMemoryStorage());
+
+  await assert.rejects(
+    services.households.create({
+      householdName: 'H'.repeat(81),
+      displayName: 'Ari',
+      avatarColor: '#F36F56',
+    }),
+    /80 characters or fewer/,
+  );
+  await assert.rejects(
+    services.households.create({
+      householdName: 'Maple House',
+      displayName: 'M'.repeat(61),
+      avatarColor: '#F36F56',
+    }),
+    /60 characters or fewer/,
+  );
+
+  const creator = await services.households.create({
+    householdName: 'Maple House',
+    displayName: 'Ari',
+    avatarColor: '#F36F56',
+  });
+  await assert.rejects(
+    services.households.join({
+      inviteCode: creator.household.inviteCode,
+      displayName: 'M'.repeat(61),
+      avatarColor: '#9ED9C5',
+    }),
+    /60 characters or fewer/,
+  );
+});
+
 test('completion retries are idempotent and survive adapter recreation', async () => {
   const storage = createMemoryStorage();
   const services = createLocalServices(storage);

@@ -6,6 +6,7 @@ import { AppHeader } from '../../src/components/AppHeader';
 import { Button } from '../../src/components/Button';
 import { TextField } from '../../src/components/TextField';
 import { useHouseholdSession } from '../../src/context/HouseholdSessionContext';
+import { displayNameError, householdNameError } from '../../src/services/householdValidation';
 import { colors, spacing } from '../../src/theme/tokens';
 
 export default function CreateHouseholdScreen() {
@@ -17,12 +18,12 @@ export default function CreateHouseholdScreen() {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const householdError = submitted && !householdName.trim() ? 'Give your home a name so everyone recognizes it.' : undefined;
-  const nameError = submitted && !displayName.trim() ? 'Add the name your roommates know you by.' : undefined;
+  const householdError = submitted ? householdNameError(householdName) : undefined;
+  const nameError = submitted ? displayNameError(displayName) : undefined;
 
   const handleCreate = async () => {
     setSubmitted(true);
-    if (!householdName.trim() || !displayName.trim()) {
+    if (householdNameError(householdName) || displayNameError(displayName)) {
       setSubmitError(null);
       return;
     }

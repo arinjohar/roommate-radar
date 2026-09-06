@@ -13,6 +13,7 @@ import type {
 } from './contracts';
 import { nextDueDate, parseSchedule, type ChoreScope } from './choreSchedule';
 import { createDemoData, type DemoData } from './demoData';
+import { validateDisplayName, validateHouseholdName } from './householdValidation';
 
 const DATA_KEY = '@roommate-radar/demo-data/v1';
 const SESSION_KEY = '@roommate-radar/session/v1';
@@ -281,11 +282,13 @@ export function createLocalServices(
     households: {
       async create(input) {
         const data = await readData();
+        const householdName = validateHouseholdName(input.householdName);
+        const displayName = validateDisplayName(input.displayName);
         const householdId = makeId();
         const memberId = makeId();
         const household = {
           id: householdId,
-          name: input.householdName.trim(),
+          name: householdName,
           inviteCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
           creatorMemberId: memberId,
           createdAt: new Date().toISOString(),
@@ -293,7 +296,7 @@ export function createLocalServices(
         const member = {
           id: memberId,
           householdId: household.id,
-          displayName: input.displayName.trim(),
+          displayName,
           avatarColor: input.avatarColor,
         };
         data.households.push(household);
@@ -303,6 +306,7 @@ export function createLocalServices(
       },
       async join(input) {
         const data = await readData();
+        const displayName = validateDisplayName(input.displayName);
         const household = data.households.find(
           (item) => item.inviteCode === normalizeCode(input.inviteCode),
         );
@@ -310,7 +314,7 @@ export function createLocalServices(
         const member = {
           id: makeId(),
           householdId: household.id,
-          displayName: input.displayName.trim(),
+          displayName,
           avatarColor: input.avatarColor,
         };
         data.members.push(member);
