@@ -1,6 +1,6 @@
+/** Shared shapes for values that cross the screen/service boundary. */
 export type ISODateString = string;
 export type ISODateTimeString = string;
-
 export type ChoreRecurrence = 'once' | 'daily' | 'weekly' | 'biweekly' | 'monthly';
 
 export interface Household {
@@ -17,23 +17,26 @@ export interface Member {
   avatarColor: string;
 }
 
-export interface Chore {
+export type Chore = {
   id: string;
   householdId: string;
   title: string;
   points: number;
-  assigneeId: string | null;
-  dueAt: ISODateTimeString;
-  recurrence: ChoreRecurrence;
-}
+  assigneeIds: string[];
+  dueAt: string;
+  recurrence: string;
+  dueIntervalDays?: number | null;
+  isPreApproved?: boolean;
+  seriesId?: string;
+};
 
-export interface Completion {
+export type Completion = {
   id: string;
   choreId: string;
   memberId: string;
   pointsAwarded: number;
-  completedAt: ISODateTimeString;
-}
+  completedAt: string;
+};
 
 export interface PulseScores {
   cleanliness: number;

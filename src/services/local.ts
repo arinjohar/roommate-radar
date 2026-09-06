@@ -23,6 +23,12 @@ export function createLocalServices(storage: Storage = AsyncStorage): RoommateRa
     if (serialized) {
       const saved = JSON.parse(serialized) as DemoData;
       saved.completionRequestIds ??= {};
+      saved.chores = saved.chores.map((chore) => {
+        const legacy = chore as typeof chore & { assigneeId?: string | null };
+        if (Array.isArray(chore.assigneeIds)) return chore;
+        const { assigneeId, ...current } = legacy;
+        return { ...current, assigneeIds: assigneeId ? [assigneeId] : [] };
+      });
       return saved;
     }
     const seeded = createDemoData();
