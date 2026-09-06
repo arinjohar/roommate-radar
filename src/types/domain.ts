@@ -7,6 +7,8 @@ export type Chore = {
   assigneeId: string;
   dueAt: string;
   recurrence: string;
+  isPreApproved: boolean;
+  seriesId?: string;
 };
 
 export type Completion = {
