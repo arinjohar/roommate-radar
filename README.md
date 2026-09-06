@@ -25,6 +25,34 @@ npm run ios
 npm run android
 ```
 
+### Windows and remote phones
+
+Tunnel support is installed with the project, so a fresh Windows checkout does
+not need a separate global ngrok installation. From PowerShell or Command Prompt,
+run:
+
+```powershell
+npm ci
+npm run start:tunnel
+```
+
+If PowerShell reports that `npm.ps1` cannot be loaded, use the Windows command
+shim instead:
+
+```powershell
+npm.cmd ci
+npm.cmd run start:tunnel
+```
+
+When Windows Security prompts for access, allow the Node.js and ngrok executables
+for the network profile you are using. Do not disable antivirus or the firewall;
+if ngrok is quarantined, allow only the executable installed under this project's
+`node_modules` folder. Both the computer and phone must have internet access.
+
+The tunnel should print `Tunnel connected` and `Tunnel ready` before you scan its
+QR code. Tunnel startup depends on Expo's ngrok service and can occasionally need
+a retry during an outage.
+
 Check TypeScript before opening a pull request:
 
 ```bash
