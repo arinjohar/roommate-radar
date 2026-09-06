@@ -2,8 +2,10 @@
   "expo": {
     "name": "Roommate Radar",
     "slug": "roommate-radar",
+    "scheme": "roommateradar",
     "version": "1.0.0",
     "orientation": "portrait",
+    "plugins": ["expo-router"],
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
